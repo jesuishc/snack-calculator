@@ -1,29 +1,69 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>마트 과자 가성비 계산기</title>
 <style>
-body{font-family:'Malgun Gothic',system-ui,sans-serif;background:#f8f9fa;padding:16px;color:#333}h1{text-align:center;color:#2c3e50;font-size:26px}.subtitle{text-align:center;color:#7f8c8d;margin-bottom:24px}.btn-container{text-align:center;margin-bottom:16px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap}button{background:#3182ce;color:white;border:0;padding:10px 16px;font-size:15px;border-radius:8px;cursor:pointer;font-weight:bold}button:hover{background:#2b6cb0}.topbox{max-width:760px;margin:0 auto 16px;background:#fff;border-radius:10px;padding:12px 16px;box-shadow:0 2px 5px rgba(0,0,0,.08)}.topbox strong{color:#2c5282}.table-wrap{overflow-x:auto}table{width:100%;min-width:760px;border-collapse:collapse;background:#fff;box-shadow:0 4px 6px rgba(0,0,0,.1);border-radius:8px;overflow:hidden;margin-bottom:30px}th,td{padding:12px 15px;text-align:center;border-bottom:1px solid #edf2f7}th{background:#4a5568;color:#fff;font-weight:bold}tr:hover{background:#f7fafc}.badge{padding:4px 8px;border-radius:4px;font-size:12px;font-weight:bold;background:#edf2f7;color:#4a5568}.coupang{background:#ebf8ff;color:#2b6cb0}.bmart{background:#feebc8;color:#c05621}.equal{background:#edf2f7;color:#4a5568}select{padding:6px;border-radius:4px;border:1px solid #cbd5e0;font-size:14px;cursor:pointer}.score{font-weight:bold;color:#e53e3e}
+:root{--bg:#f6f7fb;--card:#fff;--text:#1f2937;--muted:#6b7280;--blue:#2563eb;--red:#ef4444;--line:#e5e7eb;--green:#16a34a;--orange:#f97316}*{box-sizing:border-box}body{margin:0;font-family:'Malgun Gothic',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text)}header{position:sticky;top:0;z-index:10;background:rgba(246,247,251,.94);backdrop-filter:blur(8px);padding:14px 14px 10px;border-bottom:1px solid var(--line)}h1{margin:0;text-align:center;font-size:22px;color:#111827}.subtitle{margin:6px 0 0;text-align:center;font-size:13px;color:var(--muted)}.topbox{margin:12px 0 0;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;box-shadow:0 4px 12px rgba(0,0,0,.05);font-size:14px}.topbox strong{color:var(--blue)}.actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}button{border:0;border-radius:12px;padding:11px 10px;font-weight:800;font-size:14px;cursor:pointer}.primary{background:var(--blue);color:white}.ghost{background:#e5e7eb;color:#374151}.cards{padding:14px;display:grid;gap:12px;max-width:900px;margin:0 auto}.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:12px;box-shadow:0 5px 14px rgba(0,0,0,.06)}.card-top{display:grid;grid-template-columns:74px 1fr;gap:12px;align-items:start}.thumb{width:74px;height:74px;border-radius:14px;object-fit:cover;background:#eef2ff;border:1px solid var(--line);cursor:pointer}.name{font-size:17px;font-weight:900;margin-bottom:5px}.meta{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}.badge{display:inline-block;padding:4px 8px;border-radius:999px;font-size:12px;font-weight:900}.coupang{background:#dbeafe;color:#1d4ed8}.bmart{background:#ffedd5;color:#c2410c}.equal{background:#e5e7eb;color:#374151}.note{font-size:12px;color:var(--muted)}.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}.field{background:#f9fafb;border:1px solid var(--line);border-radius:12px;padding:8px}.label{font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:800}.pricebox{display:flex;align-items:center;gap:4px}input[type=number],input[type=url]{width:100%;border:0;background:transparent;font-size:15px;font-weight:800;outline:none;color:var(--text)}.won{font-size:13px;color:var(--muted);font-weight:800}.score{font-size:18px;font-weight:1000;color:var(--red)}.stars{display:flex;gap:2px;flex-wrap:nowrap}.star{font-size:24px;line-height:1;background:transparent;color:#d1d5db;padding:1px;border-radius:5px}.star.on{color:#f59e0b}.url-row{margin-top:8px;display:grid;grid-template-columns:1fr auto;gap:6px}.url-row input{background:#f9fafb;border:1px solid var(--line);border-radius:12px;padding:9px;font-size:12px;font-weight:600}.smallbtn{padding:9px 10px;border-radius:12px;background:#111827;color:#fff;font-size:12px}.modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.74);z-index:99;align-items:center;justify-content:center;padding:20px}.modal.open{display:flex}.modal-card{background:#fff;border-radius:18px;padding:12px;width:min(96vw,520px)}.modal img{width:100%;max-height:70vh;object-fit:contain;border-radius:12px;background:#f3f4f6}.modal-title{font-weight:900;margin:8px 4px 0}.close{width:100%;margin-top:10px;background:#111827;color:#fff}.help{padding:0 14px 18px;max-width:900px;margin:0 auto;color:var(--muted);font-size:12px;line-height:1.5}@media(min-width:760px){.cards{grid-template-columns:repeat(2,1fr)}header{padding-left:24px;padding-right:24px}.actions{max-width:520px;margin:10px auto 0}}@media(max-width:380px){.card-top{grid-template-columns:64px 1fr}.thumb{width:64px;height:64px}.name{font-size:16px}.star{font-size:22px}.grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
+<header>
 <h1>🛒 마트 과자 가성비 계산기</h1>
-<p class="subtitle">만족도 1~5점을 선택하면 실시간으로 가성비 점수가 계산됩니다.</p>
+<p class="subtitle">가격 수정 · 별점 선택 · 이미지 URL 연결 · 모바일 최적화</p>
 <div class="topbox" id="topResult">아직 만족도를 선택하지 않았습니다.</div>
-<div class="btn-container"><button onclick="sortTable()">🔥 가성비 높은 순 정렬</button><button onclick="resetScores()">↩️ 초기화</button></div>
-<div class="table-wrap"><table id="snackTable"><thead><tr><th>상품명</th><th>추천 판매처</th><th>최저 기준가</th><th>만족도</th><th>가성비 점수</th><th>비고</th></tr></thead><tbody></tbody></table></div>
+<div class="actions"><button class="primary" onclick="sortCards()">🔥 가성비순 정렬</button><button class="ghost" onclick="resetAll()">↩️ 전체 초기화</button></div>
+</header>
+<main class="cards" id="cards"></main>
+<div class="help">이미지는 각 카드의 <b>이미지 URL</b> 칸에 인터넷 이미지 주소를 붙여넣고 적용하면 바뀝니다. 가격, 별점, 이미지 URL은 이 브라우저에 자동 저장됩니다.</div>
+<div class="modal" id="modal" onclick="closeModal(event)"><div class="modal-card"><img id="modalImg" src="" alt="상품 이미지"><div class="modal-title" id="modalTitle"></div><button class="close" onclick="hideModal()">닫기</button></div></div>
 <script>
-const snacks=[['몽쉘 딸기','coupang','💡 쿠팡',4980,'-'],['버터링 초코','coupang','쿠팡',4070,'비마트 미판매'],['오예스 쿠앤크','coupang','쿠팡',4800,'비마트 미판매'],['버터와플 이즈니','coupang','💡 쿠팡',3280,'-'],['츄러스 초코','bmart','💡 비마트',1480,'-'],['초코파이 망고','coupang','💡 쿠팡',4690,'-'],['후레쉬 베리수','coupang','💡 쿠팡',5650,'-'],['카스타드 피넛버터','coupang','💡 쿠팡',2730,'-'],['두바이 하임','coupang','💡 쿠팡',3690,'-'],['오예스 피스타치오','coupang','쿠팡',5100,'비마트 미판매'],['빅파이 레몬','bmart','💡 비마트',4080,'-'],['나! 샌드','bmart','비마트',1390,'쿠팡 미판매'],['카스타드 말차','bmart','💡 비마트',4735,'쿠팡 2개 기준 단가 환산'],['홈런볼','bmart','💡 비마트',5600,'-'],['뽀또 체다치즈','equal','동일',2700,'쿠팡 2개 기준 단가 환산'],['누룽지 메이플','coupang','💡 쿠팡',1360,'-'],['누들핏 매콤','coupang','💡 쿠팡',2530,'쿠팡 2개 기준 단가 환산'],['초코파이 말차','coupang','💡 쿠팡',4560,'-'],['버터링 피스타치오','bmart','💡 비마트',3290,'-'],['말차하임','bmart','💡 비마트',6390,'-']];
-const tbody=document.querySelector('#snackTable tbody');
-const opts='<option value="0">선택</option><option value="1">⭐ 1점</option><option value="2">⭐⭐ 2점</option><option value="3">⭐⭐⭐ 3점</option><option value="4">⭐⭐⭐⭐ 4점</option><option value="5">⭐⭐⭐⭐⭐ 5점</option>';
-snacks.forEach(s=>{const tr=document.createElement('tr');tr.dataset.price=s[3];tr.innerHTML=`<td>${s[0]}</td><td><span class="badge ${s[1]}">${s[2]}</span></td><td>${s[3].toLocaleString()}원</td><td><select onchange="calculate(this)">${opts}</select></td><td class="score">-</td><td>${s[4]}</td>`;tbody.appendChild(tr)});
-function calculate(sel){const row=sel.closest('tr'),price=+row.dataset.price,sat=+sel.value,cell=row.querySelector('.score');cell.innerText=sat>0?((sat/price)*1000).toFixed(2)+' 점':'-';updateTopResult()}
-function getScore(row){return parseFloat(row.querySelector('.score').innerText)||0}
-function sortTable(){Array.from(tbody.querySelectorAll('tr')).sort((a,b)=>getScore(b)-getScore(a)).forEach(r=>tbody.appendChild(r));updateTopResult()}
-function updateTopResult(){const scored=Array.from(tbody.querySelectorAll('tr')).filter(r=>getScore(r)>0);if(!scored.length){topResult.innerText='아직 만족도를 선택하지 않았습니다.';return}scored.sort((a,b)=>getScore(b)-getScore(a));const t=scored[0];topResult.innerHTML=`현재 1등: <strong>${t.children[0].innerText}</strong> / 가성비 점수 <strong>${t.querySelector('.score').innerText}</strong>`}
-function resetScores(){document.querySelectorAll('select').forEach(s=>s.value='0');document.querySelectorAll('.score').forEach(c=>c.innerText='-');updateTopResult()}
+const PLACEHOLDER='https://placehold.co/500x500/f3f4f6/334155?text=Snack';
+const defaultSnacks=[
+{id:'mongshell_strawberry',name:'몽쉘 딸기',store:'coupang',storeText:'💡 쿠팡',price:4980,note:'-'},
+{id:'butterring_choco',name:'버터링 초코',store:'coupang',storeText:'쿠팡',price:4070,note:'비마트 미판매'},
+{id:'ohyes_cnc',name:'오예스 쿠앤크',store:'coupang',storeText:'쿠팡',price:4800,note:'비마트 미판매'},
+{id:'butterwaffle_isigny',name:'버터와플 이즈니',store:'coupang',storeText:'💡 쿠팡',price:3280,note:'-'},
+{id:'churros_choco',name:'츄러스 초코',store:'bmart',storeText:'💡 비마트',price:1480,note:'-'},
+{id:'chocopie_mango',name:'초코파이 망고',store:'coupang',storeText:'💡 쿠팡',price:4690,note:'-'},
+{id:'fresh_berry',name:'후레쉬 베리수',store:'coupang',storeText:'💡 쿠팡',price:5650,note:'-'},
+{id:'custard_peanut',name:'카스타드 피넛버터',store:'coupang',storeText:'💡 쿠팡',price:2730,note:'-'},
+{id:'dubai_heim',name:'두바이 하임',store:'coupang',storeText:'💡 쿠팡',price:3690,note:'-'},
+{id:'ohyes_pistachio',name:'오예스 피스타치오',store:'coupang',storeText:'쿠팡',price:5100,note:'비마트 미판매'},
+{id:'bigpie_lemon',name:'빅파이 레몬',store:'bmart',storeText:'💡 비마트',price:4080,note:'-'},
+{id:'na_sand',name:'나! 샌드',store:'bmart',storeText:'비마트',price:1390,note:'쿠팡 미판매'},
+{id:'custard_matcha',name:'카스타드 말차',store:'bmart',storeText:'💡 비마트',price:4735,note:'쿠팡 2개 기준 단가 환산'},
+{id:'homerunball',name:'홈런볼',store:'bmart',storeText:'💡 비마트',price:5600,note:'-'},
+{id:'bbotto_cheese',name:'뽀또 체다치즈',store:'equal',storeText:'동일',price:2700,note:'쿠팡 2개 기준 단가 환산'},
+{id:'nurungji_maple',name:'누룽지 메이플',store:'coupang',storeText:'💡 쿠팡',price:1360,note:'-'},
+{id:'noodlefit_spicy',name:'누들핏 매콤',store:'coupang',storeText:'💡 쿠팡',price:2530,note:'쿠팡 2개 기준 단가 환산'},
+{id:'chocopie_matcha',name:'초코파이 말차',store:'coupang',storeText:'💡 쿠팡',price:4560,note:'-'},
+{id:'butterring_pistachio',name:'버터링 피스타치오',store:'bmart',storeText:'💡 비마트',price:3290,note:'-'},
+{id:'matcha_heim',name:'말차하임',store:'bmart',storeText:'💡 비마트',price:6390,note:'-'}];
+let snacks=loadData();
+function loadData(){const saved=JSON.parse(localStorage.getItem('snackData')||'{}');return defaultSnacks.map(s=>({...s,...saved[s.id]}));}
+function saveData(){const data={};snacks.forEach(s=>data[s.id]={price:s.price,rating:s.rating||0,img:s.img||''});localStorage.setItem('snackData',JSON.stringify(data));}
+function score(s){return s.rating>0&&s.price>0?Number(((s.rating/s.price)*1000).toFixed(2)):0;}
+function render(){const root=document.getElementById('cards');root.innerHTML='';snacks.forEach(s=>{const sc=score(s);const card=document.createElement('section');card.className='card';card.dataset.id=s.id;card.innerHTML=`
+<div class="card-top">
+<img class="thumb" src="${s.img||PLACEHOLDER}" onerror="this.src=PLACEHOLDER" onclick="showModal('${s.id}')" alt="${s.name}">
+<div><div class="name" onclick="showModal('${s.id}')">${s.name}</div><div class="meta"><span class="badge ${s.store}">${s.storeText}</span><span class="note">${s.note}</span></div><div class="stars">${[1,2,3,4,5].map(n=>`<button class="star ${(s.rating||0)>=n?'on':''}" onclick="setRating('${s.id}',${n})">★</button>`).join('')}</div></div>
+</div>
+<div class="grid"><div class="field"><div class="label">가격 수정</div><div class="pricebox"><input type="number" value="${s.price}" min="1" step="10" onchange="setPrice('${s.id}',this.value)"><span class="won">원</span></div></div><div class="field"><div class="label">가성비 점수</div><div class="score">${sc?sc+' 점':'-'}</div></div></div>
+<div class="url-row"><input type="url" placeholder="이미지 URL 붙여넣기" value="${s.img||''}" onchange="setImg('${s.id}',this.value)"><button class="smallbtn" onclick="applyImg('${s.id}',this)">적용</button></div>`;root.appendChild(card);});updateTop();}
+function find(id){return snacks.find(s=>s.id===id)}
+function setRating(id,n){find(id).rating=n;saveData();render();}
+function setPrice(id,v){find(id).price=Math.max(1,Number(v)||1);saveData();render();}
+function setImg(id,v){find(id).img=(v||'').trim();saveData();render();}
+function applyImg(id,btn){const input=btn.previousElementSibling;setImg(id,input.value);}
+function sortCards(){snacks.sort((a,b)=>score(b)-score(a));render();}
+function updateTop(){const ranked=snacks.filter(s=>score(s)>0).sort((a,b)=>score(b)-score(a));const box=document.getElementById('topResult');if(!ranked.length){box.innerText='아직 만족도를 선택하지 않았습니다.';return;}const top=ranked[0];box.innerHTML=`현재 1등: <strong>${top.name}</strong> / ${top.price.toLocaleString()}원 / <strong>${score(top)} 점</strong>`;}
+function resetAll(){if(!confirm('수정한 가격, 별점, 이미지 URL을 모두 초기화할까요?'))return;localStorage.removeItem('snackData');snacks=loadData();render();}
+function showModal(id){const s=find(id);document.getElementById('modalImg').src=s.img||PLACEHOLDER;document.getElementById('modalTitle').innerText=s.name;document.getElementById('modal').classList.add('open');}
+function hideModal(){document.getElementById('modal').classList.remove('open');}
+function closeModal(e){if(e.target.id==='modal')hideModal();}
+render();
 </script>
 </body>
 </html>
