@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>마트 과자 가성비 계산기</title>
+<style>
+body{font-family:'Malgun Gothic',system-ui,sans-serif;background:#f8f9fa;padding:16px;color:#333}h1{text-align:center;color:#2c3e50;font-size:26px}.subtitle{text-align:center;color:#7f8c8d;margin-bottom:24px}.btn-container{text-align:center;margin-bottom:16px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap}button{background:#3182ce;color:white;border:0;padding:10px 16px;font-size:15px;border-radius:8px;cursor:pointer;font-weight:bold}button:hover{background:#2b6cb0}.topbox{max-width:760px;margin:0 auto 16px;background:#fff;border-radius:10px;padding:12px 16px;box-shadow:0 2px 5px rgba(0,0,0,.08)}.topbox strong{color:#2c5282}.table-wrap{overflow-x:auto}table{width:100%;min-width:760px;border-collapse:collapse;background:#fff;box-shadow:0 4px 6px rgba(0,0,0,.1);border-radius:8px;overflow:hidden;margin-bottom:30px}th,td{padding:12px 15px;text-align:center;border-bottom:1px solid #edf2f7}th{background:#4a5568;color:#fff;font-weight:bold}tr:hover{background:#f7fafc}.badge{padding:4px 8px;border-radius:4px;font-size:12px;font-weight:bold;background:#edf2f7;color:#4a5568}.coupang{background:#ebf8ff;color:#2b6cb0}.bmart{background:#feebc8;color:#c05621}.equal{background:#edf2f7;color:#4a5568}select{padding:6px;border-radius:4px;border:1px solid #cbd5e0;font-size:14px;cursor:pointer}.score{font-weight:bold;color:#e53e3e}
+</style>
+</head>
+<body>
+<h1>🛒 마트 과자 가성비 계산기</h1>
+<p class="subtitle">만족도 1~5점을 선택하면 실시간으로 가성비 점수가 계산됩니다.</p>
+<div class="topbox" id="topResult">아직 만족도를 선택하지 않았습니다.</div>
+<div class="btn-container"><button onclick="sortTable()">🔥 가성비 높은 순 정렬</button><button onclick="resetScores()">↩️ 초기화</button></div>
+<div class="table-wrap"><table id="snackTable"><thead><tr><th>상품명</th><th>추천 판매처</th><th>최저 기준가</th><th>만족도</th><th>가성비 점수</th><th>비고</th></tr></thead><tbody></tbody></table></div>
+<script>
+const snacks=[['몽쉘 딸기','coupang','💡 쿠팡',4980,'-'],['버터링 초코','coupang','쿠팡',4070,'비마트 미판매'],['오예스 쿠앤크','coupang','쿠팡',4800,'비마트 미판매'],['버터와플 이즈니','coupang','💡 쿠팡',3280,'-'],['츄러스 초코','bmart','💡 비마트',1480,'-'],['초코파이 망고','coupang','💡 쿠팡',4690,'-'],['후레쉬 베리수','coupang','💡 쿠팡',5650,'-'],['카스타드 피넛버터','coupang','💡 쿠팡',2730,'-'],['두바이 하임','coupang','💡 쿠팡',3690,'-'],['오예스 피스타치오','coupang','쿠팡',5100,'비마트 미판매'],['빅파이 레몬','bmart','💡 비마트',4080,'-'],['나! 샌드','bmart','비마트',1390,'쿠팡 미판매'],['카스타드 말차','bmart','💡 비마트',4735,'쿠팡 2개 기준 단가 환산'],['홈런볼','bmart','💡 비마트',5600,'-'],['뽀또 체다치즈','equal','동일',2700,'쿠팡 2개 기준 단가 환산'],['누룽지 메이플','coupang','💡 쿠팡',1360,'-'],['누들핏 매콤','coupang','💡 쿠팡',2530,'쿠팡 2개 기준 단가 환산'],['초코파이 말차','coupang','💡 쿠팡',4560,'-'],['버터링 피스타치오','bmart','💡 비마트',3290,'-'],['말차하임','bmart','💡 비마트',6390,'-']];
+const tbody=document.querySelector('#snackTable tbody');
+const opts='<option value="0">선택</option><option value="1">⭐ 1점</option><option value="2">⭐⭐ 2점</option><option value="3">⭐⭐⭐ 3점</option><option value="4">⭐⭐⭐⭐ 4점</option><option value="5">⭐⭐⭐⭐⭐ 5점</option>';
+snacks.forEach(s=>{const tr=document.createElement('tr');tr.dataset.price=s[3];tr.innerHTML=`<td>${s[0]}</td><td><span class="badge ${s[1]}">${s[2]}</span></td><td>${s[3].toLocaleString()}원</td><td><select onchange="calculate(this)">${opts}</select></td><td class="score">-</td><td>${s[4]}</td>`;tbody.appendChild(tr)});
+function calculate(sel){const row=sel.closest('tr'),price=+row.dataset.price,sat=+sel.value,cell=row.querySelector('.score');cell.innerText=sat>0?((sat/price)*1000).toFixed(2)+' 점':'-';updateTopResult()}
+function getScore(row){return parseFloat(row.querySelector('.score').innerText)||0}
+function sortTable(){Array.from(tbody.querySelectorAll('tr')).sort((a,b)=>getScore(b)-getScore(a)).forEach(r=>tbody.appendChild(r));updateTopResult()}
+function updateTopResult(){const scored=Array.from(tbody.querySelectorAll('tr')).filter(r=>getScore(r)>0);if(!scored.length){topResult.innerText='아직 만족도를 선택하지 않았습니다.';return}scored.sort((a,b)=>getScore(b)-getScore(a));const t=scored[0];topResult.innerHTML=`현재 1등: <strong>${t.children[0].innerText}</strong> / 가성비 점수 <strong>${t.querySelector('.score').innerText}</strong>`}
+function resetScores(){document.querySelectorAll('select').forEach(s=>s.value='0');document.querySelectorAll('.score').forEach(c=>c.innerText='-');updateTopResult()}
+</script>
+</body>
+</html>
