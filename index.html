@@ -18,14 +18,14 @@
     <select id="retailer"><option value="all">전체</option><option value="coupang">쿠팡</option><option value="gs25">GS25 행사</option></select>
     <button onclick="lookupPrice()">가격 검색</button>
   </div>
-  <div class="status" id="lookupStatus">검색 결과는 옵션·묶음 수량·점포에 따라 실제 가격과 다를 수 있습니다.</div>
+  <div class="status" id="lookupStatus">모바일에서도 가격 검색을 사용할 수 있습니다. 결과는 옵션·묶음 수량·점포에 따라 다를 수 있습니다.</div>
   <div class="results" id="lookupResults"></div>
 </section>
 <div class="topbox" id="topResult">아직 만족도를 선택하지 않았습니다.</div>
 <div class="actions"><button onclick="sortCards()">🔥 가성비순 정렬</button><button onclick="resetAll()">↩️ 전체 초기화</button></div>
 </header>
 <main class="cards" id="cards"></main>
-<p class="notice">가격 조회는 공개 웹페이지를 서버에서 읽는 실험 기능입니다. 판매처가 페이지 구조나 접근 정책을 바꾸면 일시적으로 실패할 수 있습니다.</p>
+<p class="notice">가격 조회는 공개 웹페이지를 읽는 실험 기능입니다. 자동 조회가 제한되면 쿠팡·GS25·네이버쇼핑 직접 검색 버튼이 표시됩니다.</p>
 <script>
 const fallback='https://placehold.co/500x500/f3f4f6/334155?text=Snack';
 const data=[['mongshell_strawberry','몽쉘 딸기',4980],['butterring_choco','버터링 초코',4070],['ohyes_cnc','오예스 쿠앤크',4800],['butterwaffle_isigny','버터와플 이즈니',3280],['churros_choco','츄러스 초코',1480],['chocopie_mango','초코파이 망고',4690],['fresh_berry','후레쉬 베리',5650],['custard_peanut','카스타드 피넛버터',2730],['dubai_heim','두바이 하임',3690],['ohyes_pistachio','오예스 피스타치오',5100],['bigpie_lemon','빅파이 레몬',4080],['na_sand','나! 샌드',1390],['custard_matcha','카스타드 말차',4735],['homerunball','홈런볼',5600],['bbotto_cheese','뽀또 체다치즈',2700],['nurungji_maple','누룽지 메이플',1360],['noodlefit_spicy','누들핏 매콤',2530],['chocopie_matcha','초코파이 말차',4560],['butterring_pistachio','버터링 피스타치오',3290],['matcha_heim','말차하임',6390]];
@@ -42,9 +42,10 @@ function sortCards(){snacks.sort((a,b)=>score(b)-score(a));render()}
 function topUpdate(){const r=snacks.filter(s=>score(s)>0).sort((a,b)=>score(b)-score(a));topResult.innerHTML=r.length?`현재 1등: <strong>${r[0].name}</strong> / ${r[0].price.toLocaleString()}원 / <strong>${score(r[0])}점</strong>`:'아직 만족도를 선택하지 않았습니다.'}
 function resetAll(){if(!confirm('수정값을 초기화할까요?'))return;localStorage.removeItem('snackData');snacks=load();render()}
 function searchFor(id){targetId=id;query.value=find(id).name;lookupPrice();document.querySelector('.lookup').scrollIntoView({behavior:'smooth'})}
-async function lookupPrice(){const q=query.value.trim();if(q.length<2)return alert('상품명을 2글자 이상 입력하세요.');lookupStatus.textContent='가격을 조회하고 있습니다…';lookupResults.innerHTML='';try{const r=await fetch(`/api/prices?q=${encodeURIComponent(q)}&retailer=${retailer.value}`);const json=await r.json();if(!r.ok)throw new Error(json.error||'조회 실패');const items=json.results.flatMap(group=>group.products||[]);lookupStatus.textContent=items.length?`${items.length}개 결과 · ${new Date(json.checkedAt).toLocaleString()}`:'검색 결과가 없습니다. 판매처 차단 또는 상품명 불일치일 수 있습니다.';items.forEach(item=>{const el=document.createElement('div');el.className='result';el.innerHTML=`<div><strong>${item.name}</strong><small>${item.retailer.toUpperCase()} ${item.promotion||''}</small></div><span class="price">${item.price.toLocaleString()}원</span><button class="apply">가격 적용</button>`;el.querySelector('button').onclick=()=>applyResult(item);lookupResults.appendChild(el)})}catch(e){lookupStatus.textContent=`조회 실패: ${e.message}. 이 페이지를 GitHub Pages가 아닌 Node 서버로 실행했는지 확인하세요.`}}
+async function lookupPrice(){const q=query.value.trim();if(q.length<2)return alert('상품명을 2글자 이상 입력하세요.');lookupStatus.textContent='가격을 조회하고 있습니다…';lookupResults.innerHTML='';try{const r=await fetch(`/api/prices?q=${encodeURIComponent(q)}&retailer=${retailer.value}`);const type=r.headers.get('content-type')||'';if(!type.includes('application/json'))throw new Error('서버 API 없음');const json=await r.json();if(!r.ok)throw new Error(json.error||'조회 실패');const items=json.results.flatMap(group=>group.products||[]);lookupStatus.textContent=items.length?`${items.length}개 결과 · ${new Date(json.checkedAt).toLocaleString()}`:'검색 결과가 없습니다.';items.forEach(item=>{const el=document.createElement('div');el.className='result';el.innerHTML=`<div><strong>${item.name}</strong><small>${item.retailer.toUpperCase()} ${item.promotion||''}</small></div><span class="price">${item.price.toLocaleString()}원</span><button class="apply">가격 적용</button>`;el.querySelector('button').onclick=()=>applyResult(item);lookupResults.appendChild(el)})}catch(e){throw e}}
 function applyResult(item){let s=targetId?find(targetId):snacks.find(x=>x.name.includes(query.value)||query.value.includes(x.name));if(!s){alert('먼저 카드의 “이 상품 가격 검색” 버튼으로 검색하세요.');return}s.price=item.price;save();render();lookupStatus.textContent=`${s.name} 가격을 ${item.price.toLocaleString()}원으로 적용했습니다.`}
 query.addEventListener('keydown',e=>{if(e.key==='Enter')lookupPrice()});render();
 </script>
+<script src="mobile-price.js"></script>
 </body>
 </html>
