@@ -1,10 +1,10 @@
 export function supabaseConfig() {
   const base = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_PUBLISHABLE_KEY;
   return base && key ? { base: base.replace(/\/$/, ''), key } : null;
 }
 
-export async function dbFetch(path, options = {}) {
+export async function dbFetch(path, options = {}, context = {}) {
   const config = supabaseConfig();
   if (!config) throw Object.assign(new Error('Supabase not configured'), { status: 503 });
   const response = await fetch(`${config.base}/rest/v1/${path}`, {
@@ -13,6 +13,7 @@ export async function dbFetch(path, options = {}) {
       apikey: config.key,
       Authorization: `Bearer ${config.key}`,
       'Content-Type': 'application/json',
+      ...(context.householdId ? { 'x-household-id': String(context.householdId) } : {}),
       ...(options.headers || {})
     }
   });
