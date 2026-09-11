@@ -1,10 +1,10 @@
 import { dedupeProducts, extractSpec, fetchText, normalizeProduct, queryMatches, stripTags } from './common.js';
+import { searchCompareService } from './mcp.js';
 
 export function parseGs25Html(rawHtml, q, storeId = '', sourceUrl = '') {
   const html = String(rawHtml).replace(/\r?\n/g, ' ');
   const products = [];
   const cards = html.match(/<(?:li|div)[^>]+class="[^"]*(?:prod|product|goods)[^"]*"[\s\S]{0,2500}?<\/(?:li|div)>/gi) || [];
-
   for (const card of cards) {
     const name = stripTags((card.match(/<(?:p|strong|span)[^>]+class="[^"]*(?:tit|name)[^"]*"[^>]*>([\s\S]*?)<\/(?:p|strong|span)>/i) || [])[1]);
     if (!name || !queryMatches(name, q)) continue;
@@ -13,7 +13,6 @@ export function parseGs25Html(rawHtml, q, storeId = '', sourceUrl = '') {
     const productId = (card.match(/(?:goodsCd|productCode|goodsCode)["'=:\s]+([A-Za-z0-9_-]+)/i) || [])[1] || '';
     products.push(normalizeProduct('gs25', { name, price, promotion, productId, storeId, url: sourceUrl, ...extractSpec(name) }));
   }
-
   if (!products.length) {
     const text = stripTags(html);
     const escaped = String(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -28,6 +27,10 @@ export function parseGs25Html(rawHtml, q, storeId = '', sourceUrl = '') {
 }
 
 export async function searchGs25({ q, storeId = '' }) {
+  try {
+    const mcp = await searchCompareService({ q, retailer: 'gs25', service: 'gs25', storeId });
+    if (mcp.products.length) return mcp;
+  } catch {}
   const sourceUrl = `https://gs25.gsretail.com/gscvs/ko/products/event-goods?searchWord=${encodeURIComponent(q)}`;
   const html = await fetchText(sourceUrl);
   return { retailer: 'gs25', sourceUrl, products: parseGs25Html(html, q, storeId, sourceUrl) };
