@@ -1,5 +1,4 @@
-import { dedupeProducts, extractSpec, fetchText, normalizeProduct, queryMatches, stripTags } from './common.js';
-import { searchCuViaMcp } from './mcp.js';
+import { dedupeProducts, extractSpec, fetchText, normalizeProduct, queryMatches, stripTags, searchMcpCu } from './common.js';
 
 export function parseCuHtml(rawHtml, q, storeId = '', sourceUrl = '') {
   const html = String(rawHtml).replace(/\r?\n/g, ' ');
@@ -17,10 +16,7 @@ export function parseCuHtml(rawHtml, q, storeId = '', sourceUrl = '') {
 }
 
 export async function searchCu({ q, storeId = '' }) {
-  try {
-    const mcp = await searchCuViaMcp({ q, storeId });
-    if (mcp.products.length) return mcp;
-  } catch {}
+  try { const mcp = await searchMcpCu({ q, storeId }); if (mcp.products.length) return mcp; } catch {}
   const sourceUrl = `https://cu.bgfretail.com/product/search.do?searchText=${encodeURIComponent(q)}`;
   const html = await fetchText(sourceUrl, { timeout: 15000 });
   return { retailer: 'cu', sourceUrl, products: parseCuHtml(html, q, storeId, sourceUrl) };
