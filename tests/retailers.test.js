@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { extractSpec, queryMatches } from '../api/retailers/common.js';
-import { parseCoupangHtml } from '../api/retailers/coupang.js';
+import { parseCoupangHtml, parseCoupangReader } from '../api/retailers/coupang.js';
 import { parseGs25Html } from '../api/retailers/gs25.js';
 import { parseEmart24Html } from '../api/retailers/emart24.js';
 
@@ -23,6 +23,21 @@ test('Coupang fixture is normalized', () => {
   assert.equal(item.productId, '12345');
   assert.equal(item.weight, 384);
   assert.equal(item.count, 12);
+});
+
+test('Coupang reader handles current plain-text search rows', () => {
+  const text = `# '버터링86g'에 대한 검색결과\n* 버터링 소프트 과자쿠키, 86g, 12개 17,950원(10g당 174원) 모레 도착 예정\n* 해태제과 버터링 소프트, 86g, 5개 9,780원(10g당 227원)`;
+  const items = parseCoupangReader(text, '버터링', 'https://www.coupang.com/np/search?q=버터링');
+  assert.equal(items.length, 2);
+  assert.equal(items[0].price, 17950);
+  assert.equal(items[0].weight, 86);
+  assert.equal(items[0].count, 12);
+});
+
+test('Coupang reader prefers discounted sale price', () => {
+  const text = `* 해태 버터링 86g, 3개 할인~~10,000원~~25%7,500원 내일 도착`;
+  const [item] = parseCoupangReader(text, '버터링', 'https://www.coupang.com/np/search?q=버터링');
+  assert.equal(item.price, 7500);
 });
 
 test('GS25 fixture carries promotion and store id', () => {
