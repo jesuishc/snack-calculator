@@ -58,12 +58,31 @@ export function dedupeProducts(products = []) {
 }
 
 export function extractSpec(name = '') {
-  const weight = (name.match(/(\d+(?:\.\d+)?)\s*(?:g|그램)\b/i) || [])[1] || 0;
-  const count = (name.match(/(\d+)\s*(?:개|입|ea|p|pack)\b/i) || [])[1] || 0;
-  return { weight: toNumber(weight), count: toNumber(count) };
+  const text = String(name).toLowerCase();
+  const weightFirst = text.match(/(\d+(?:\.\d+)?)\s*(g|kg|그램)\s*[x×*]\s*(\d+)\s*(?:개입|개|입|ea|p|팩|pack)?/i);
+  const countFirst = text.match(/(\d+)\s*(?:개입|개|입|ea|p|팩|pack)\s*[x×*]\s*(\d+(?:\.\d+)?)\s*(g|kg|그램)/i);
+  if (weightFirst) {
+    const count = toNumber(weightFirst[3]);
+    const each = toNumber(weightFirst[1]) * (/kg/i.test(weightFirst[2]) ? 1000 : 1);
+    return { weight: each * count, count };
+  }
+  if (countFirst) {
+    const count = toNumber(countFirst[1]);
+    const each = toNumber(countFirst[2]) * (/kg/i.test(countFirst[3]) ? 1000 : 1);
+    return { weight: each * count, count };
+  }
+  const weightMatch = text.match(/(\d+(?:\.\d+)?)\s*(kg|g|그램)/i);
+  const countMatch = text.match(/(\d+)\s*(?:개입|개|입|ea|팩|pack|p)/i);
+  return {
+    weight: weightMatch ? toNumber(weightMatch[1]) * (/kg/i.test(weightMatch[2]) ? 1000 : 1) : 0,
+    count: countMatch ? toNumber(countMatch[1]) : 0
+  };
 }
 
 export function queryMatches(name = '', query = '') {
-  const compactName = name.toLowerCase().replace(/\s+/g, '');
-  return query.toLowerCase().split(/\s+/).filter(Boolean).every(token => compactName.includes(token));
+  const compactName = String(name).toLowerCase().replace(/\s+/g, '');
+  const tokens = String(query).toLowerCase().split(/\s+/).map(token => token.replace(/[^0-9a-z가-힣]/g, '')).filter(token => token.length > 1);
+  if (!tokens.length) return true;
+  const hits = tokens.filter(token => compactName.includes(token)).length;
+  return hits >= Math.max(1, Math.ceil(tokens.length * 0.6));
 }
