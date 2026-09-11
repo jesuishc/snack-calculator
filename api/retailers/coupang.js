@@ -1,4 +1,8 @@
+import crypto from 'node:crypto';
 import { dedupeProducts, extractSpec, fetchText, normalizeProduct, queryMatches, stripTags } from './common.js';
+
+const COUPANG_API_HOST = 'https://api-gateway.coupang.com';
+const COUPANG_SEARCH_PATH = '/v2/providers/affiliate_open_api/apis/openapi/products/search';
 
 export function parseCoupangHtml(html, q, sourceUrl = '') {
   const blocks = String(html).match(/<li[^>]+class="[^"]*search-product[^"]*"[\s\S]*?<\/li>/gi) || [];
@@ -46,7 +50,6 @@ export function parseCoupangReader(text, q, sourceUrl = '') {
   const lines = String(text).split(/\r?\n/).map(line => line.trim()).filter(Boolean);
   const products = [];
 
-  // Current Jina/Coupang output is often plain text, not markdown links.
   for (const line of lines) {
     const price = readerPrice(line);
     if (!price) continue;
@@ -67,7 +70,6 @@ export function parseCoupangReader(text, q, sourceUrl = '') {
     }));
   }
 
-  // Older reader output can split name/link and price across nearby lines.
   if (!products.length) {
     for (let i = 0; i < lines.length; i += 1) {
       if (!/\b[0-9]{1,3}(?:,[0-9]{3})+\s*원\b/.test(lines[i])) continue;
@@ -91,7 +93,60 @@ export function parseCoupangReader(text, q, sourceUrl = '') {
   return dedupeProducts(products).slice(0, 12);
 }
 
+function signedDate(now = new Date()) {
+  const iso = now.toISOString().replace(/[-:]/g, '');
+  return iso.slice(2, 8) + 'T' + iso.slice(9, 15) + 'Z';
+}
+
+function coupangAuthorization(method, path, query, accessKey, secretKey) {
+  const datetime = signedDate();
+  const message = `${datetime}${method}${path}${query}`;
+  const signature = crypto.createHmac('sha256', secretKey).update(message).digest('hex');
+  return `CEA algorithm=HmacSHA256, access-key=${accessKey}, signed-date=${datetime}, signature=${signature}`;
+}
+
+export async function searchCoupangPartners(q) {
+  const accessKey = String(process.env.COUPANG_PARTNERS_ACCESS_KEY || '').trim();
+  const secretKey = String(process.env.COUPANG_PARTNERS_SECRET_KEY || '').trim();
+  if (!accessKey || !secretKey) return null;
+
+  const params = new URLSearchParams({ keyword: q, limit: '10' });
+  const subId = String(process.env.COUPANG_PARTNERS_SUB_ID || '').trim();
+  if (subId) params.set('subId', subId);
+  const query = params.toString();
+  const url = `${COUPANG_API_HOST}${COUPANG_SEARCH_PATH}?${query}`;
+  const response = await fetch(url, {
+    headers: {
+      accept: 'application/json',
+      authorization: coupangAuthorization('GET', COUPANG_SEARCH_PATH, query, accessKey, secretKey)
+    },
+    signal: AbortSignal.timeout(15000)
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || String(payload?.rCode ?? '0') !== '0') {
+    throw new Error(`쿠팡 파트너스 API 오류: ${payload?.rMessage || `HTTP ${response.status}`}`);
+  }
+
+  const rows = Array.isArray(payload?.data?.productData)
+    ? payload.data.productData
+    : Array.isArray(payload?.data) ? payload.data : [];
+  const products = rows
+    .filter(item => item?.productName && Number(item?.productPrice) > 0 && queryMatches(item.productName, q))
+    .map(item => normalizeProduct('coupang', {
+      name: item.productName,
+      price: item.productPrice,
+      productId: item.productId,
+      image: item.productImage,
+      url: item.productUrl,
+      ...extractSpec(item.productName)
+    }));
+  return { retailer: 'coupang', sourceUrl: url, products: dedupeProducts(products).slice(0, 10) };
+}
+
 export async function searchCoupang({ q }) {
+  const partners = await searchCoupangPartners(q);
+  if (partners?.products?.length) return partners;
+
   const sourceUrl = `https://www.coupang.com/np/search?q=${encodeURIComponent(q)}`;
   try {
     const html = await fetchText(sourceUrl, {
@@ -106,12 +161,18 @@ export async function searchCoupang({ q }) {
     if (direct.length) return { retailer: 'coupang', sourceUrl, products: direct };
   } catch {}
 
-  const readerUrl = `https://r.jina.ai/${sourceUrl}`;
-  const text = await fetchText(readerUrl, {
-    timeout: 25000,
-    headers: { accept: 'text/plain' }
-  });
-  const products = parseCoupangReader(text, q, sourceUrl);
-  if (!products.length) throw new Error('Coupang returned no usable product prices');
-  return { retailer: 'coupang', sourceUrl, products };
+  try {
+    const readerUrl = `https://r.jina.ai/${sourceUrl}`;
+    const text = await fetchText(readerUrl, {
+      timeout: 25000,
+      headers: { accept: 'text/plain' }
+    });
+    const products = parseCoupangReader(text, q, sourceUrl);
+    if (products.length) return { retailer: 'coupang', sourceUrl, products };
+  } catch {}
+
+  if (!process.env.COUPANG_PARTNERS_ACCESS_KEY || !process.env.COUPANG_PARTNERS_SECRET_KEY) {
+    throw new Error('쿠팡 자동검색 설정이 필요합니다. COUPANG_PARTNERS_ACCESS_KEY와 COUPANG_PARTNERS_SECRET_KEY를 Vercel Preview 환경변수에 등록해 주세요.');
+  }
+  throw new Error('쿠팡에서 현재 검색 가능한 상품 가격을 받지 못했습니다.');
 }
