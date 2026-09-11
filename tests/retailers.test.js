@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { extractSpec, queryMatches } from '../api/retailers/common.js';
-import { parseCoupangHtml, parseCoupangReader } from '../api/retailers/coupang.js';
-import { parseGs25Html } from '../api/retailers/gs25.js';
-import { parseEmart24Html } from '../api/retailers/emart24.js';
+import { extractSpec, queryMatches } from '../src/server/retailers/common.js';
+import { parseCoupangHtml, parseCoupangReader } from '../src/server/retailers/coupang.js';
+import { parseGs25Html } from '../src/server/retailers/gs25.js';
+import { parseEmart24Html } from '../src/server/retailers/emart24.js';
 
 test('common spec parser handles package expressions', () => {
   assert.deepEqual(extractSpec('몽쉘 32g x 12개'), { weight: 384, count: 12 });
