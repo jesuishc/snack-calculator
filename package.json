@@ -12,6 +12,6 @@
     "verify": "npm run check && npm test"
   },
   "engines": {
-    "node": "20.x"
+    "node": "24.x"
   }
 }
