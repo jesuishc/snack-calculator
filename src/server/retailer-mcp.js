@@ -1,4 +1,5 @@
 const MCP_BASE = 'https://mcp.aka.page';
+const GS25_TOTAL_SEARCH_URL = 'https://b2c-apigw.woodongs.com/search/v3/totalSearch';
 
 function num(value) {
   const parsed = Number(String(value ?? '').replace(/[^0-9.]/g, ''));
@@ -30,6 +31,24 @@ async function get(path, timeout = 20000) {
   return response.json();
 }
 
+async function postJson(url, body, timeout = 20000) {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      accept: 'application/json, text/plain, */*',
+      'accept-language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
+      'content-type': 'application/json',
+      origin: 'https://woodongs.com',
+      referer: 'https://woodongs.com/',
+      'user-agent': 'Mozilla/5.0 (Linux; Android 15; SM-S928N) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/124.0 Mobile Safari/537.36'
+    },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(timeout)
+  });
+  if (!response.ok) throw new Error(`GS25 direct HTTP ${response.status}`);
+  return response.json();
+}
+
 function envelope(payload) { return payload?.data || payload || {}; }
 function product(retailer, item) {
   return {
@@ -54,18 +73,46 @@ export async function searchDaisoDirect(q) {
   }));
 }
 
+async function searchGs25Official(q) {
+  const body = await postJson(GS25_TOTAL_SEARCH_URL, { query: q });
+  const collections = body?.SearchQueryResult?.Collection || [];
+  const rows = [];
+  for (const collection of collections) {
+    const docs = collection?.Documentset?.Document || [];
+    for (const doc of docs) {
+      const field = doc?.field || {};
+      const name = field.itemName || field.shortItemName || '';
+      if (!field.itemCode || !matches(name, q)) continue;
+      rows.push(product('gs25', {
+        name,
+        price: 0,
+        productId: field.itemCode,
+        image: field.itemImageUrl,
+        stock: field.stockCheckYn === 'Y',
+        url: GS25_TOTAL_SEARCH_URL
+      }));
+      if (rows.length >= 12) return rows;
+    }
+  }
+  return rows;
+}
+
 export async function searchGs25Direct(q) {
   const path = `/api/gs25/products?keyword=${encodeURIComponent(q)}&limit=12`;
-  const data = envelope(await get(path));
-  const rows = data.products || [];
-  return rows.filter(x => matches(x.itemName || x.shortItemName, q)).map(x => product('gs25', {
-    name: x.itemName || x.shortItemName,
-    price: 0,
-    productId: x.itemCode,
-    image: x.imageUrl,
-    stock: x.stockCheckEnabled,
-    url: `${MCP_BASE}${path}`
-  }));
+  try {
+    const data = envelope(await get(path));
+    const rows = data.products || [];
+    const products = rows.filter(x => matches(x.itemName || x.shortItemName, q)).map(x => product('gs25', {
+      name: x.itemName || x.shortItemName,
+      price: 0,
+      productId: x.itemCode,
+      image: x.imageUrl,
+      stock: x.stockCheckEnabled,
+      url: `${MCP_BASE}${path}`
+    }));
+    if (products.length) return products;
+  } catch {}
+  return searchGs25Official(q);
 }
 
 export async function resolveGs25Price(q, itemCode) {
