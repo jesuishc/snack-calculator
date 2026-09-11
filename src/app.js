@@ -43,6 +43,7 @@ function migrateSnack(source = {}) {
 }
 function ratingOf(snack) { return num(snack.ratings?.[currentProfile()]); }
 function scoringSnack(snack) { return { ...snack, rating: ratingOf(snack) }; }
+function remoteCandidate(item, storeId) { return { store: storeId, ...extractCandidateMeta(item.name, item.url), ...item }; }
 
 let stores = load('snackStoresV4', defaultsStores);
 let snacks = load('snackSheetV4', null);
@@ -167,7 +168,7 @@ async function findSimilar(id, storeId) {
   els.modalBody.innerHTML=`<h2>${FIXED[storeId].label} 후보 검색</h2><div class="status" id="status">규격이 비슷한 상품을 찾고 있습니다…</div><div id="candidateList"></div><div class="fallback" id="fallback"></div><button class="btn soft" style="width:100%;margin-top:8px" onclick="closeModal()">닫기</button>`; els.modal.classList.add('open');
   try {
     let items; const remote=await searchBackend(snack,storeId); const remembered=snack.offers?.[storeId]?.productId||'';
-    if(remote?.products) items=rankCandidates(snack,remote.products.map(item=>({store:storeId,...item,...extractCandidateMeta(item.name,item.url)})),remembered);
+    if(remote?.products) items=rankCandidates(snack,remote.products.map(item=>remoteCandidate(item,storeId)),remembered);
     else { const response=await fetch('https://r.jina.ai/'+FIXED[storeId].url(`${snack.brand} ${snack.name}`.trim())); if(!response.ok)throw new Error('fallback search failed'); items=parseProducts(await response.text(),storeId,snack); }
     showCandidates(items.slice(0,12),remembered);
   } catch {
@@ -193,11 +194,10 @@ async function refreshRememberedPrices() {
   if(!targets.length) return alert('먼저 각 판매처에서 상품을 한 번 선택해 주세요.');
   let updated=0,skipped=0,failed=0;
   for(let i=0;i<targets.length;i+=1){
-    const {snack,store,offer}=targets[i];
-    els.cloudStatus.textContent=`가격 갱신 ${i+1}/${targets.length}…`;
+    const {snack,store,offer}=targets[i]; els.cloudStatus.textContent=`가격 갱신 ${i+1}/${targets.length}…`;
     try{
       const remote=await searchBackend(snack,store.id);
-      const candidates=rankCandidates(snack,(remote?.products||[]).map(item=>({store:store.id,...item,...extractCandidateMeta(item.name,item.url)})),offer.productId||'');
+      const candidates=rankCandidates(snack,(remote?.products||[]).map(item=>remoteCandidate(item,store.id)),offer.productId||'');
       let candidate=null;
       if(offer.productId) candidate=candidates.find(item=>item.productId&&String(item.productId)===String(offer.productId));
       if(!candidate&&offer.matchedName){
