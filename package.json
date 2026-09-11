@@ -7,8 +7,7 @@
     "start": "node server.js",
     "start:env": "node --env-file=.env server.js",
     "dev": "node --watch server.js",
-    "build": "npm run check",
-    "check": "node --check server.js && node --check src/app.js && node --check src/retailer-extension.js && node --check src/domain/price-calculator.js && node --check src/domain/matcher.js && node --check src/domain/history.js && node --check src/domain/state-merge.js && node --check api/search.js && node --check api/household.js && node --check api/history.js && node --check api/db.js && node --check api/local-store.js && node --check api/retailers/common.js && node --check api/retailers/coupang.js && node --check api/retailers/gs25.js && node --check api/retailers/emart24.js && node --check register-sw.js && node --check sw.js",
+    "check": "node --check server.js && node --check src/app.js && node --check src/domain/price-calculator.js && node --check src/domain/matcher.js && node --check src/domain/history.js && node --check src/domain/state-merge.js && node --check api/search.js && node --check api/household.js && node --check api/history.js && node --check api/db.js && node --check api/local-store.js && node --check api/retailers/common.js && node --check api/retailers/coupang.js && node --check api/retailers/gs25.js && node --check api/retailers/emart24.js && node --check register-sw.js && node --check sw.js",
     "test": "node --test",
     "verify": "npm run check && npm test"
   },
