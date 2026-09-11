@@ -8,12 +8,16 @@ test('1+1 doubles received quantity', () => {
   assert.equal(receivedBundles({ bundles: 1, promo: '1+1' }), 2);
 });
 
-test('2+1 converts paid bundles into received bundles', () => {
+test('2+1 only grants free units for complete pairs', () => {
+  assert.equal(receivedBundles({ bundles: 1, promo: '2+1' }), 1);
   assert.equal(receivedBundles({ bundles: 2, promo: '2+1' }), 3);
+  assert.equal(receivedBundles({ bundles: 5, promo: '2+1' }), 7);
 });
 
-test('3+1 converts paid bundles into received bundles', () => {
+test('3+1 only grants free units for complete trios', () => {
+  assert.equal(receivedBundles({ bundles: 2, promo: '3+1' }), 2);
   assert.equal(receivedBundles({ bundles: 3, promo: '3+1' }), 4);
+  assert.equal(receivedBundles({ bundles: 7, promo: '3+1' }), 9);
 });
 
 test('calculates total, each and 100g including shipping', () => {
@@ -21,15 +25,10 @@ test('calculates total, each and 100g including shipping', () => {
   assert.equal(result.total, 8000);
   assert.equal(result.each, 400);
   assert.equal(result.g100, 1000);
+  assert.equal(result.received, 2);
 });
 
 test('value score uses the cheapest positive offer', () => {
-  const snack = {
-    ...product,
-    offers: {
-      a: { price: 5000, bundles: 1, shipping: 0, promo: 'none' },
-      b: { price: 4000, bundles: 1, shipping: 0, promo: 'none' }
-    }
-  };
-  assert.equal(valueScore(snack, [{ id: 'a' }, { id: 'b' }], 'total'), 1);
+  const snack = { ...product, offers: { a:{price:5000,bundles:1,shipping:0,promo:'none'}, b:{price:4000,bundles:1,shipping:0,promo:'none'} } };
+  assert.equal(valueScore(snack, [{ id:'a' }, { id:'b' }], 'total'), 1);
 });
