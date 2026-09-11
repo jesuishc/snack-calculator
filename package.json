@@ -6,7 +6,9 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "test": "node --test"
+    "check": "node --check server.js && node --check src/app.js && node --check api/search.js && node --check api/household.js && node --check api/history.js",
+    "test": "node --test",
+    "verify": "npm run check && npm test"
   },
   "engines": {
     "node": ">=20"
