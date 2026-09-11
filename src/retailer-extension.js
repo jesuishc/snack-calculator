@@ -19,6 +19,7 @@ const EXTRA_RETAILERS = {
 
 const esc = (value = '') => String(value).replace(/[&<>'"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;' }[c]));
 const num = value => Number(value) || 0;
+const PENDING_SHARE_KEY = 'snackPendingRetailerShareV1';
 
 function ensureRetailerColumns() {
   const key = 'snackStoresV4';
@@ -97,73 +98,91 @@ async function enrichGs25Candidate(snack, candidate, status) {
   return { ...candidate, ...enriched };
 }
 
-function extractCoupangProductId(url = '') {
-  return (String(url).match(/\/vp\/products\/(\d+)/i) || [])[1] || '';
+function rememberPendingShare(snackId, storeId, query) {
+  localStorage.setItem(PENDING_SHARE_KEY, JSON.stringify({ snackId, storeId, query, createdAt: Date.now() }));
 }
 
-async function pasteCoupangUrl() {
-  const input = document.getElementById('coupangUrl');
-  const status = document.getElementById('coupangStatus');
+function readPendingShare() {
   try {
-    const text = await navigator.clipboard.readText();
-    if (!text) throw new Error('클립보드가 비어 있습니다.');
-    input.value = text.trim();
-    status.textContent = '쿠팡 상품 URL을 붙여넣었습니다. 가격을 확인해서 입력해 주세요.';
+    const value = JSON.parse(localStorage.getItem(PENDING_SHARE_KEY) || 'null');
+    if (!value || Date.now() - Number(value.createdAt || 0) > 30 * 60 * 1000) return null;
+    return value;
+  } catch { return null; }
+}
+
+function extractSharedUrl(params) {
+  const direct = params.get('url') || '';
+  if (/^https?:\/\//i.test(direct)) return direct.trim();
+  const combined = `${params.get('text') || ''} ${params.get('title') || ''}`;
+  return (combined.match(/https?:\/\/[^\s]+/i) || [])[0] || '';
+}
+
+async function consumeSharedProduct() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('shared') !== '1') return false;
+
+  const pending = readPendingShare();
+  const sharedUrl = extractSharedUrl(params);
+  const modal = document.getElementById('modal');
+  const body = document.getElementById('modalBody');
+  modal.classList.add('open');
+
+  if (!pending || !sharedUrl) {
+    body.innerHTML = `<h2>공유 상품 확인 실패</h2><div class="status">어떤 과자에 저장할지 확인하지 못했습니다. 과자가격 앱에서 다시 상품 찾기를 눌러 시작해 주세요.</div><div class="foot"><button class="btn soft" onclick="closeModal()">닫기</button></div>`;
+    history.replaceState({}, '', '/');
+    return true;
+  }
+
+  body.innerHTML = `<h2>${esc(EXTRA_RETAILERS[pending.storeId]?.label || pending.storeId)} 가격 확인</h2><div class="status" id="shareStatus">선택한 상품 상세페이지에서 판매가격을 읽고 있습니다…</div>`;
+  try {
+    const url = new URL((window.SNACK_CONFIG?.apiBase || window.location.origin).replace(/\/$/, '') + '/api/search');
+    url.searchParams.set('q', pending.query || '상품');
+    url.searchParams.set('retailer', pending.storeId);
+    url.searchParams.set('sourceUrl', sharedUrl);
+    const response = await fetch(url);
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+    const product = payload.products?.[0];
+    if (!product || !(num(product.price) > 0)) throw new Error('선택한 상품의 판매가격을 읽지 못했습니다.');
+
+    saveCandidate(pending.snackId, pending.storeId, product);
+    localStorage.removeItem(PENDING_SHARE_KEY);
+    history.replaceState({}, '', '/');
+    document.getElementById('shareStatus').textContent = `${product.name || pending.query} · ${num(product.price).toLocaleString()}원 저장 완료`;
+    setTimeout(() => window.location.reload(), 700);
   } catch (error) {
-    status.textContent = `클립보드 읽기 실패: ${error.message || '직접 URL을 붙여넣어 주세요.'}`;
+    history.replaceState({}, '', '/');
+    document.getElementById('shareStatus').textContent = `가격 자동 추출 실패: ${error.message || 'unknown error'}`;
+    const foot = document.createElement('div');
+    foot.className = 'foot';
+    foot.innerHTML = '<button class="btn soft" onclick="closeModal()">닫기</button>';
+    body.appendChild(foot);
   }
+  return true;
 }
 
-function saveCoupangManual(snackId) {
-  const snack = getSnacks().find(item => String(item.id) === String(snackId));
-  if (!snack) return;
-  const name = document.getElementById('coupangName')?.value.trim() || snack.name;
-  const price = num(document.getElementById('coupangPrice')?.value);
-  const url = document.getElementById('coupangUrl')?.value.trim() || EXTRA_RETAILERS.coupang.url(snack.name || '');
-  const status = document.getElementById('coupangStatus');
-  if (!(price > 0)) {
-    status.textContent = '쿠팡에서 확인한 판매가격을 입력해 주세요.';
-    document.getElementById('coupangPrice')?.focus();
-    return;
-  }
-  saveCandidate(snackId, 'coupang', {
-    name,
-    price,
-    url,
-    productId: extractCoupangProductId(url),
-    promotion: 'none'
-  });
-  window.location.reload();
-}
-
-function openCoupangManual(snackId) {
+function openCoupangShareFlow(snackId) {
   const snack = getSnacks().find(item => String(item.id) === String(snackId));
   if (!snack) return;
   const retailer = EXTRA_RETAILERS.coupang;
   const query = `${snack.brand || ''} ${snack.name || ''}`.trim();
-  const existing = snack.offers?.coupang || {};
   const modal = document.getElementById('modal');
   const body = document.getElementById('modalBody');
   body.innerHTML = `
     <h2>쿠팡 상품 선택</h2>
-    <div class="status" id="coupangStatus">파트너스 키 없이 쿠팡 공식 검색에서 실제 상품을 확인한 뒤 가격을 저장합니다.</div>
-    <div class="tip">① 아래 버튼으로 쿠팡에서 상품을 고릅니다. ② 상품명·가격을 입력하고, 가능하면 상품 URL도 붙여넣습니다. 저장된 URL의 상품 ID는 자동 추출됩니다.</div>
+    <div class="status">원하는 상품을 연 뒤 쿠팡의 공유 버튼에서 <strong>과자가격</strong>을 선택하면 가격이 자동 저장됩니다.</div>
+    <div class="tip">① 쿠팡 검색 열기 → ② 원하는 상품 상세페이지 열기 → ③ 공유 → 과자가격 선택. URL이나 가격을 직접 입력할 필요가 없습니다.</div>
     <button class="btn dark" style="width:100%;margin:10px 0" id="openCoupangSearch">쿠팡에서 “${esc(query)}” 검색</button>
-    <div class="formgrid">
-      <label class="span2">선택한 상품명<input id="coupangName" value="${esc(existing.matchedName || snack.name || '')}" placeholder="예: 해태 버터링 86g"></label>
-      <label>판매가격(원)<input id="coupangPrice" type="number" inputmode="numeric" min="1" value="${existing.price || ''}" placeholder="예: 3980"></label>
-      <label>상품 URL<input id="coupangUrl" value="${esc(existing.sourceUrl || '')}" placeholder="https://www.coupang.com/vp/products/..."></label>
-    </div>
-    <button class="btn soft" style="width:100%;margin-top:8px" id="pasteCoupangUrl">클립보드의 쿠팡 URL 붙여넣기</button>
-    <div class="foot"><button class="btn primary" id="saveCoupangManual">쿠팡 가격 저장</button><button class="btn soft" onclick="closeModal()">취소</button></div>`;
+    <div class="foot"><button class="btn soft" onclick="closeModal()">취소</button></div>`;
   modal.classList.add('open');
-  document.getElementById('openCoupangSearch').onclick = () => window.open(retailer.url(query), '_blank', 'noopener');
-  document.getElementById('pasteCoupangUrl').onclick = pasteCoupangUrl;
-  document.getElementById('saveCoupangManual').onclick = () => saveCoupangManual(snackId);
+  document.getElementById('openCoupangSearch').onclick = () => {
+    rememberPendingShare(snackId, 'coupang', query);
+    window.open(retailer.url(query), '_blank', 'noopener');
+  };
 }
 
 async function findExtraRetailer(snackId, storeId) {
-  if (storeId === 'coupang') return openCoupangManual(snackId);
+  if (storeId === 'coupang') return openCoupangShareFlow(snackId);
 
   const retailer = EXTRA_RETAILERS[storeId];
   const snack = getSnacks().find(item => String(item.id) === String(snackId));
@@ -240,13 +259,18 @@ function installBridge() {
   return true;
 }
 
-Object.assign(window, { pasteCoupangUrl, saveCoupangManual });
-
-if (ensureRetailerColumns()) {
-  window.location.reload();
-} else if (!installBridge()) {
-  const timer = setInterval(() => {
-    if (installBridge()) clearInterval(timer);
-  }, 50);
-  setTimeout(() => clearInterval(timer), 5000);
+async function bootRetailerExtension() {
+  if (ensureRetailerColumns()) {
+    window.location.reload();
+    return;
+  }
+  await consumeSharedProduct();
+  if (!installBridge()) {
+    const timer = setInterval(() => {
+      if (installBridge()) clearInterval(timer);
+    }, 50);
+    setTimeout(() => clearInterval(timer), 5000);
+  }
 }
+
+bootRetailerExtension();
