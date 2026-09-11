@@ -117,6 +117,10 @@ function extractSharedUrl(params) {
   return (combined.match(/https?:\/\/[^\s]+/i) || [])[0] || '';
 }
 
+function isInstalledApp() {
+  return window.matchMedia?.('(display-mode: standalone)')?.matches || window.navigator.standalone === true;
+}
+
 async function consumeSharedProduct() {
   const params = new URLSearchParams(window.location.search);
   if (params.get('shared') !== '1') return false;
@@ -168,10 +172,13 @@ function openCoupangShareFlow(snackId) {
   const query = `${snack.brand || ''} ${snack.name || ''}`.trim();
   const modal = document.getElementById('modal');
   const body = document.getElementById('modalBody');
+  const installNotice = isInstalledApp()
+    ? '<div class="status">✅ 과자가격 앱이 설치형으로 실행 중입니다.</div>'
+    : '<div class="status">⚠️ 먼저 이 페이지를 홈 화면에 설치한 뒤 설치된 <strong>과자가격</strong> 앱에서 다시 시작해 주세요. Android 공유 대상 등록은 설치형 앱에서 동작합니다.</div>';
   body.innerHTML = `
     <h2>쿠팡 상품 선택</h2>
-    <div class="status">원하는 상품을 연 뒤 쿠팡의 공유 버튼에서 <strong>과자가격</strong>을 선택하면 가격이 자동 저장됩니다.</div>
-    <div class="tip">① 쿠팡 검색 열기 → ② 원하는 상품 상세페이지 열기 → ③ 공유 → 과자가격 선택. URL이나 가격을 직접 입력할 필요가 없습니다.</div>
+    ${installNotice}
+    <div class="tip"><strong>중요:</strong> 쿠팡 페이지 안에 있는 공유 아이콘은 사용하지 않습니다.<br>① 아래 버튼으로 쿠팡 검색 → ② 상품 상세페이지 선택 → ③ <strong>브라우저 메뉴(⋮ 또는 ≡) → 공유</strong> → ④ <strong>과자가격</strong> 선택.<br>상품명·가격·URL을 직접 입력할 필요는 없습니다.</div>
     <button class="btn dark" style="width:100%;margin:10px 0" id="openCoupangSearch">쿠팡에서 “${esc(query)}” 검색</button>
     <div class="foot"><button class="btn soft" onclick="closeModal()">취소</button></div>`;
   modal.classList.add('open');
