@@ -1,8 +1,7 @@
-import {
-  num, migrateOffer, calculateMetrics, compareValue, bestValue, valueScore
-} from './domain/price-calculator.js';
+import { num, migrateOffer, calculateMetrics, compareValue, bestValue, valueScore } from './domain/price-calculator.js';
 import { extractCandidateMeta, rankCandidates, textSimilarity } from './domain/matcher.js';
 import { addHistory, historyFor, priceChange } from './domain/history.js';
+import { mergeAppStates } from './domain/state-merge.js';
 
 const CONFIG = window.SNACK_CONFIG || {};
 const FIXED = {
@@ -15,7 +14,7 @@ const defaultsStores = [
   { id: 'gs25', name: 'GS25', fixed: true },
   { id: 'emart24', name: '이마트24', fixed: true }
 ];
-const defaultsSnacks = ['몽쉘 딸기', '버터링 초코', '오예스 쿠앤크'].map((name, i) => ({
+const makeDefaultSnacks = () => ['몽쉘 딸기', '버터링 초코', '오예스 쿠앤크'].map((name, i) => ({
   id: String(Date.now() + i), name, brand: '', weight: 0, count: 0, barcode: '', ratings: {}, offers: {}
 }));
 
@@ -35,8 +34,7 @@ function householdId() { return localStorage.getItem('snackHouseholdId') || ''; 
 function migrateSnack(source = {}) {
   const offers = {};
   Object.entries(source.offers || source.prices || {}).forEach(([key, value]) => { offers[key] = migrateOffer(value); });
-  const legacyRating = num(source.rating);
-  const ratings = { ...(source.ratings || {}) };
+  const legacyRating = num(source.rating); const ratings = { ...(source.ratings || {}) };
   if (legacyRating && !Object.keys(ratings).length) ratings[currentProfile()] = legacyRating;
   return {
     id: String(source.id || Date.now() + Math.random()), name: source.name || '이름 없음', brand: source.brand || '',
@@ -45,42 +43,14 @@ function migrateSnack(source = {}) {
 }
 function ratingOf(snack) { return num(snack.ratings?.[currentProfile()]); }
 function scoringSnack(snack) { return { ...snack, rating: ratingOf(snack) }; }
-function offerNewer(a, b) {
-  const ta = Date.parse(a?.checkedAt || '') || 0; const tb = Date.parse(b?.checkedAt || '') || 0;
-  return ta >= tb ? a : b;
-}
-function mergeHistory(a = [], b = []) {
-  const map = new Map();
-  [...a, ...b].forEach(item => {
-    const key = item.id || `${item.productId}|${item.storeId}|${item.price}|${item.promotion}|${item.checkedAt}`;
-    map.set(key, item);
-  });
-  return [...map.values()].sort((x, y) => new Date(y.checkedAt) - new Date(x.checkedAt)).slice(0, 500);
-}
-function mergeState(localState, remoteState = {}) {
-  const storeMap = new Map((remoteState.stores || []).map(store => [store.id, store]));
-  (localState.stores || []).forEach(store => storeMap.set(store.id, { ...storeMap.get(store.id), ...store }));
-  const snackMap = new Map((remoteState.snacks || []).map(item => [String(item.id), migrateSnack(item)]));
-  (localState.snacks || []).forEach(raw => {
-    const local = migrateSnack(raw); const remote = snackMap.get(local.id);
-    if (!remote) return snackMap.set(local.id, local);
-    const offers = { ...remote.offers };
-    for (const [storeId, localOffer] of Object.entries(local.offers)) offers[storeId] = offerNewer(localOffer, remote.offers?.[storeId]);
-    snackMap.set(local.id, { ...remote, ...local, ratings: { ...remote.ratings, ...local.ratings }, offers });
-  });
-  return {
-    stores: [...storeMap.values()], snacks: [...snackMap.values()], basisMode: localState.basisMode || remoteState.basisMode || 'total',
-    storeSettings: { ...(remoteState.storeSettings || {}), ...(localState.storeSettings || {}) },
-    history: mergeHistory(remoteState.history || [], localState.history || [])
-  };
-}
 
 let stores = load('snackStoresV4', defaultsStores);
 let snacks = load('snackSheetV4', null);
 let basisMode = localStorage.getItem('snackBasis') || 'total';
 let history = load('snackHistoryV1', []);
+let tombstones = load('snackTombstonesV1', { snacks: {}, stores: {} });
 let active = null;
-if (!snacks) snacks = load('snackSheetV3', defaultsSnacks).map(migrateSnack); else snacks = snacks.map(migrateSnack);
+if (!snacks) snacks = load('snackSheetV3', makeDefaultSnacks()).map(migrateSnack); else snacks = snacks.map(migrateSnack);
 els.basis.value = basisMode;
 
 function save() {
@@ -88,6 +58,7 @@ function save() {
   localStorage.setItem('snackSheetV4', JSON.stringify(snacks));
   localStorage.setItem('snackBasis', basisMode);
   localStorage.setItem('snackHistoryV1', JSON.stringify(history));
+  localStorage.setItem('snackTombstonesV1', JSON.stringify(tombstones));
 }
 function fmt(value) { return value ? Math.round(value).toLocaleString() : '-'; }
 function specText(snack) {
@@ -100,19 +71,22 @@ function changeText(snack, storeId) {
   return `<div class="source">${sign} ${Math.abs(Math.round(change.amount)).toLocaleString()}원 (${Math.abs(change.percent).toFixed(1)}%)</div>`;
 }
 function render() {
-  els.headRow.innerHTML = '<th class="product">과자 / 규격 / 내 만족도</th>' + stores.map(store => `<th><div class="storehead">${esc(store.name)}${store.fixed ? '' : `<button class="storedelete" onclick="removeStore('${store.id}')">×</button>`}</div></th>`).join('') + '<th>가성비</th>';
+  els.headRow.innerHTML = '<th class="product">과자 / 규격 / 내 만족도</th>' + stores.map(store =>
+    `<th><div class="storehead">${esc(store.name)}${store.fixed ? '' : `<button class="storedelete" onclick="removeStore('${store.id}')">×</button>`}</div></th>`
+  ).join('') + '<th>가성비</th>';
   els.rows.innerHTML = '';
   if (!snacks.length) { els.rows.innerHTML = `<tr><td colspan="${stores.length + 2}">과자를 추가해 주세요.</td></tr>`; return; }
   snacks.forEach(snack => {
     const scoreSnack = scoringSnack(snack); const best = bestValue(scoreSnack, stores, basisMode); const rating = ratingOf(snack);
     const row = document.createElement('tr');
-    row.innerHTML = `<td class="product"><div class="phead"><div class="pname">${esc(snack.name)}</div><button class="mini" onclick="removeSnack('${snack.id}')">×</button></div><div class="spec">${esc(specText(snack))}</div><button class="edit" onclick="editSpec('${snack.id}')">규격 수정</button><div class="stars">${[1,2,3,4,5].map(n => `<button class="star ${rating >= n ? 'on' : ''}" onclick="rate('${snack.id}',${n})">★</button>`).join('')}</div><div class="source">${esc(currentProfile())}의 별점</div></td>` + stores.map(store => {
-      const offer = migrateOffer(snack.offers[store.id]); const metrics = calculateMetrics(snack, offer); const value = compareValue(snack, offer, basisMode);
-      const bestClass = best && Math.abs(value - best) < .01 ? 'best' : '';
-      const source = offer.matchedName ? `<div class="source" title="${esc(offer.sourceUrl)}">↳ ${esc(offer.matchedName)} · 일치 ${offer.matchScore || 0}%</div>` : '';
-      const hasHistory = historyFor(history, snack.id, store.id).length > 0;
-      return `<td class="pricecell ${bestClass}"><div class="mainprice">${offer.price ? offer.price.toLocaleString() + '원' : '가격 없음'}</div><div class="unit">결제 ${fmt(metrics.total)}원<br>개당 ${fmt(metrics.each)}원 · 100g ${fmt(metrics.g100)}원</div>${source}${changeText(snack, store.id)}<button class="find" onclick="${store.fixed ? `findSimilar('${snack.id}','${store.id}')` : `editOffer('${snack.id}','${store.id}')`}">${store.fixed ? '상품 찾기' : '가격 입력'}</button>${offer.price ? `<button class="edit" onclick="editOffer('${snack.id}','${store.id}')">상세 수정</button>` : ''}${hasHistory ? `<button class="edit" onclick="showHistory('${snack.id}','${store.id}')">가격 이력</button>` : ''}</td>`;
-    }).join('') + `<td class="score">${valueScore(scoreSnack, stores, basisMode) ? valueScore(scoreSnack, stores, basisMode) + '점' : '-'}</td>`;
+    row.innerHTML = `<td class="product"><div class="phead"><div class="pname">${esc(snack.name)}</div><button class="mini" onclick="removeSnack('${snack.id}')">×</button></div><div class="spec">${esc(specText(snack))}</div><button class="edit" onclick="editSpec('${snack.id}')">규격 수정</button><div class="stars">${[1,2,3,4,5].map(n => `<button class="star ${rating >= n ? 'on' : ''}" onclick="rate('${snack.id}',${n})">★</button>`).join('')}</div><div class="source">${esc(currentProfile())}의 별점</div></td>` +
+      stores.map(store => {
+        const offer = migrateOffer(snack.offers[store.id]); const metrics = calculateMetrics(snack, offer); const value = compareValue(snack, offer, basisMode);
+        const bestClass = best && Math.abs(value - best) < .01 ? 'best' : '';
+        const source = offer.matchedName ? `<div class="source" title="${esc(offer.sourceUrl)}">↳ ${esc(offer.matchedName)} · 일치 ${offer.matchScore || 0}%</div>` : '';
+        const hasHistory = historyFor(history, snack.id, store.id).length > 0;
+        return `<td class="pricecell ${bestClass}"><div class="mainprice">${offer.price ? offer.price.toLocaleString() + '원' : '가격 없음'}</div><div class="unit">결제 ${fmt(metrics.total)}원<br>개당 ${fmt(metrics.each)}원 · 100g ${fmt(metrics.g100)}원</div>${source}${changeText(snack, store.id)}<button class="find" onclick="${store.fixed ? `findSimilar('${snack.id}','${store.id}')` : `editOffer('${snack.id}','${store.id}')`}">${store.fixed ? '상품 찾기' : '가격 입력'}</button>${offer.price ? `<button class="edit" onclick="editOffer('${snack.id}','${store.id}')">상세 수정</button>` : ''}${hasHistory ? `<button class="edit" onclick="showHistory('${snack.id}','${store.id}')">가격 이력</button>` : ''}</td>`;
+      }).join('') + `<td class="score">${valueScore(scoreSnack, stores, basisMode) ? valueScore(scoreSnack, stores, basisMode) + '점' : '-'}</td>`;
     els.rows.appendChild(row);
   });
   els.cloudStatus.textContent = `${currentProfile()} · ${householdId() ? '공유 설정됨' : '로컬 저장'}`;
@@ -130,20 +104,26 @@ function addStore() {
 }
 function removeStore(id) {
   const store = stores.find(item => item.id === id); if (!store || store.fixed || !confirm(`“${store.name}” 열을 삭제할까요?`)) return;
-  stores = stores.filter(item => item.id !== id); snacks.forEach(snack => delete snack.offers[id]); save(); render();
+  tombstones.stores[id] = nowIso(); stores = stores.filter(item => item.id !== id); snacks.forEach(snack => delete snack.offers[id]); save(); render();
 }
 function removeSnack(id) {
-  const snack = snacks.find(item => item.id === id); if (snack && confirm(`“${snack.name}”을 삭제할까요?`)) { snacks = snacks.filter(item => item.id !== id); save(); render(); }
+  const snack = snacks.find(item => item.id === id);
+  if (snack && confirm(`“${snack.name}”을 삭제할까요?`)) { tombstones.snacks[id] = nowIso(); snacks = snacks.filter(item => item.id !== id); save(); render(); }
 }
 function rate(id, rating) { const snack = snacks.find(item => item.id === id); if (snack) { snack.ratings ||= {}; snack.ratings[currentProfile()] = rating; } save(); render(); }
 function sortRows() { snacks.sort((a, b) => valueScore(scoringSnack(b), stores, basisMode) - valueScore(scoringSnack(a), stores, basisMode)); save(); render(); }
 function resetAll() {
-  if (!confirm('상품·마트·가격 이력을 모두 초기화할까요?')) return;
-  stores = structuredClone(defaultsStores); snacks = structuredClone(defaultsSnacks).map(migrateSnack); history = []; save(); render();
+  if (!confirm('상품·동네마트·가격 이력을 초기화할까요? 공유 저장을 누르면 이 삭제 상태도 다른 기기에 반영됩니다.')) return;
+  const deletedAt = nowIso();
+  snacks.forEach(snack => { tombstones.snacks[snack.id] = deletedAt; });
+  stores.filter(store => !store.fixed).forEach(store => { tombstones.stores[store.id] = deletedAt; });
+  stores = structuredClone(defaultsStores); snacks = makeDefaultSnacks().map(migrateSnack); history = []; save(); render();
 }
+
 function editSpec(id) {
   const snack = snacks.find(item => item.id === id);
-  els.modalBody.innerHTML = `<h2>과자 규격</h2><div class="formgrid"><label class="span2">상품명<input id="fName" value="${esc(snack.name)}"></label><label>브랜드<input id="fBrand" value="${esc(snack.brand)}"></label><label>총중량(g)<input id="fWeight" type="number" value="${snack.weight || ''}"></label><label>구성 개수<input id="fCount" type="number" value="${snack.count || ''}"></label><label>바코드<input id="fBarcode" value="${esc(snack.barcode)}"></label></div><div class="foot"><button class="btn primary" onclick="saveSpec('${id}')">저장</button><button class="btn soft" onclick="closeModal()">취소</button></div>`; els.modal.classList.add('open');
+  els.modalBody.innerHTML = `<h2>과자 규격</h2><div class="formgrid"><label class="span2">상품명<input id="fName" value="${esc(snack.name)}"></label><label>브랜드<input id="fBrand" value="${esc(snack.brand)}"></label><label>총중량(g)<input id="fWeight" type="number" value="${snack.weight || ''}"></label><label>구성 개수<input id="fCount" type="number" value="${snack.count || ''}"></label><label>바코드<input id="fBarcode" value="${esc(snack.barcode)}"></label></div><div class="foot"><button class="btn primary" onclick="saveSpec('${id}')">저장</button><button class="btn soft" onclick="closeModal()">취소</button></div>`;
+  els.modal.classList.add('open');
 }
 function saveSpec(id) {
   const snack = snacks.find(item => item.id === id); snack.name = $('fName').value.trim() || snack.name; snack.brand = $('fBrand').value.trim(); snack.weight = num($('fWeight').value); snack.count = num($('fCount').value); snack.barcode = $('fBarcode').value.trim(); save(); render(); closeModal();
@@ -158,13 +138,14 @@ async function recordPrice(snack, storeId, offer) {
   const entry = { productId: snack.id, productName: snack.name, storeId, storeName: store?.name || storeId, price: offer.price, promotion: offer.promo || offer.promotion || 'none', checkedAt, sourceUrl: offer.sourceUrl || '', matchedName: offer.matchedName || '', actor: currentProfile() };
   history = addHistory(history, entry); save();
   if (!CONFIG.apiBase || !householdId() || !(offer.price > 0)) return;
-  try { await fetch(CONFIG.apiBase.replace(/\/$/, '') + '/api/history?householdId=' + encodeURIComponent(householdId()), { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify(entry) }); } catch { /* local history remains canonical offline */ }
+  try { await fetch(CONFIG.apiBase.replace(/\/$/, '') + '/api/history?householdId=' + encodeURIComponent(householdId()), { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify(entry) }); } catch {}
 }
 async function saveOffer(id, storeId) {
   const snack = snacks.find(item => item.id === id); const old = migrateOffer(snack.offers[storeId]);
   const offer = { ...old, price:num($('oPrice').value), bundles:num($('oBundles').value)||1, shipping:num($('oShipping').value), promo:$('oPromo').value, note:$('oNote').value.trim(), sourceUrl:$('oUrl').value.trim(), productId:$('oPid').value.trim(), matchedName:$('oMatched').value.trim(), checkedAt:nowIso() };
   snack.offers[storeId] = offer; await recordPrice(snack, storeId, offer); save(); render(); closeModal();
 }
+
 function clean(value = '') { return value.replace(/!\[[^\]]*\]\([^)]*\)/g,' ').replace(/\[([^\]]+)\]\(([^)]+)\)/g,'$1|$2').replace(/[*_#>|`]/g,' ').replace(/\s+/g,' ').trim(); }
 function parseProducts(text, storeId, snack) {
   const products=[]; const seen=new Set(); const pattern=/([0-9][0-9,]{2,})\s*원/g; let match;
@@ -205,8 +186,9 @@ function showHistory(id, storeId) {
   const snack=snacks.find(item=>item.id===id); const store=stores.find(item=>item.id===storeId); const rows=historyFor(history,id,storeId);
   els.modalBody.innerHTML=`<h2>${esc(snack.name)} · ${esc(store?.name||storeId)}</h2><div class="status">최근 ${rows.length}건</div>${rows.length?rows.slice(0,30).map(row=>`<div class="candidate"><span><strong>${Number(row.price).toLocaleString()}원</strong><small>${new Date(row.checkedAt).toLocaleString('ko-KR')} · ${esc(row.actor||'')} ${row.promotion&&row.promotion!=='none'?'· '+esc(row.promotion):''}</small></span><span class="won">${row.matchedName?esc(row.matchedName):''}</span></div>`).join(''):'<div class="tip">기록이 없습니다.</div>'}<button class="btn soft" style="width:100%;margin-top:8px" onclick="closeModal()">닫기</button>`; els.modal.classList.add('open');
 }
+
 function openProfileSettings() {
-  els.modalBody.innerHTML=`<h2>사용자 / 공유 설정</h2><div class="formgrid"><label>현재 사용자 이름<input id="profileName" value="${esc(currentProfile())}" placeholder="예: 나"></label><label>공유 가구키<input id="householdKey" value="${esc(householdId())}" placeholder="두 기기에서 같은 값"></label></div><div class="tip">두 분 기기에서 같은 가구키를 쓰고 사용자 이름만 다르게 설정하세요. 공개 서비스가 아니므로 로그인 대신 이 공유키를 사용합니다.</div><div class="foot"><button class="btn primary" onclick="saveProfileSettings()">저장</button><button class="btn soft" onclick="closeModal()">취소</button></div>`; els.modal.classList.add('open');
+  els.modalBody.innerHTML=`<h2>사용자 / 공유 설정</h2><div class="formgrid"><label>현재 사용자 이름<input id="profileName" value="${esc(currentProfile())}" placeholder="예: 남편"></label><label>공유 가구키<input id="householdKey" value="${esc(householdId())}" placeholder="두 기기에서 같은 값"></label></div><div class="tip">두 분 기기에서 같은 가구키를 쓰고 사용자 이름만 다르게 설정하세요. 별점은 사용자별로 보관되고 상품·가격·이력은 공유됩니다.</div><div class="foot"><button class="btn primary" onclick="saveProfileSettings()">저장</button><button class="btn soft" onclick="closeModal()">취소</button></div>`; els.modal.classList.add('open');
 }
 function saveProfileSettings() {
   const name=$('profileName').value.trim()||'나'; const key=$('householdKey').value.trim(); localStorage.setItem('snackProfile',name); if(key)localStorage.setItem('snackHouseholdId',key); else localStorage.removeItem('snackHouseholdId'); closeModal(); render();
@@ -219,18 +201,21 @@ async function fetchHousehold() {
   const response=await fetch(CONFIG.apiBase.replace(/\/$/,'')+'/api/household?householdId='+encodeURIComponent(householdId()));
   if(response.status===404)return null; if(!response.ok)throw new Error('공유 데이터 조회 실패'); return response.json();
 }
+function applyMerged(merged) {
+  stores=merged.stores||stores; snacks=(merged.snacks||snacks).map(migrateSnack); basisMode=merged.basisMode||basisMode; history=merged.history||history; tombstones=merged.tombstones||tombstones;
+  localStorage.setItem('snackStoreSettings',JSON.stringify(merged.storeSettings||{})); els.basis.value=basisMode; save(); render();
+}
 async function syncCloud(mode) {
   if(!CONFIG.apiBase){els.cloudStatus.textContent='백엔드 미연결';return alert('백엔드 주소가 없습니다.');}
   if(householdId().length<4){els.cloudStatus.textContent='공유키 필요';return openProfileSettings();}
   try {
-    els.cloudStatus.textContent='동기화 중…'; const local={stores,snacks,basisMode,storeSettings:load('snackStoreSettings',{}),history};
+    els.cloudStatus.textContent='동기화 중…'; const local={stores,snacks,basisMode,storeSettings:load('snackStoreSettings',{}),history,tombstones};
     if(mode==='push'){
-      let remote=null; try{remote=await fetchHousehold();}catch{} const merged=mergeState(local,remote||{});
+      let remote=null; try{remote=await fetchHousehold();}catch{} const merged=mergeAppStates(local,remote||{});
       const response=await fetch(CONFIG.apiBase.replace(/\/$/,'')+'/api/household?householdId='+encodeURIComponent(householdId()),{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({...merged,updatedBy:currentProfile(),updatedAt:nowIso()})}); if(!response.ok)throw new Error('저장 실패');
-      stores=merged.stores; snacks=merged.snacks.map(migrateSnack); basisMode=merged.basisMode; history=merged.history; save(); render(); els.cloudStatus.textContent=`${currentProfile()} · 공유 저장 완료`;
+      applyMerged(merged); els.cloudStatus.textContent=`${currentProfile()} · 공유 저장 완료`;
     } else {
-      const remote=await fetchHousehold(); if(!remote)throw new Error('공유 데이터 없음'); const merged=mergeState(local,remote);
-      stores=merged.stores; snacks=merged.snacks.map(migrateSnack); basisMode=merged.basisMode; history=merged.history; localStorage.setItem('snackStoreSettings',JSON.stringify(merged.storeSettings||{})); els.basis.value=basisMode; save(); render(); els.cloudStatus.textContent=`${currentProfile()} · 공유 불러오기 완료`;
+      const remote=await fetchHousehold(); if(!remote)throw new Error('공유 데이터 없음'); const merged=mergeAppStates(local,remote); applyMerged(merged); els.cloudStatus.textContent=`${currentProfile()} · 공유 불러오기 완료`;
     }
   } catch(error){els.cloudStatus.textContent='동기화 실패'; alert(error.message||'동기화 실패');}
 }
