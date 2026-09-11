@@ -1,4 +1,5 @@
-import { dbFetch } from './db.js';
+import { dbFetch, supabaseConfig } from './db.js';
+import { appendLocalHistory, listLocalHistory } from './local-store.js';
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -7,6 +8,7 @@ const cors = {
 };
 
 export async function listHistory({ householdId, productId = '', storeId = '', limit = 200 }) {
+  if (!supabaseConfig()) return listLocalHistory({ householdId, productId, storeId, limit });
   const filters = [`household_id=eq.${encodeURIComponent(householdId)}`];
   if (productId) filters.push(`product_id=eq.${encodeURIComponent(productId)}`);
   if (storeId) filters.push(`store_id=eq.${encodeURIComponent(storeId)}`);
@@ -14,22 +16,24 @@ export async function listHistory({ householdId, productId = '', storeId = '', l
 }
 
 export async function appendHistory(entry) {
+  const row = {
+    household_id: entry.householdId,
+    product_id: entry.productId,
+    product_name: entry.productName || '',
+    store_id: entry.storeId,
+    store_name: entry.storeName || '',
+    price: Number(entry.price) || 0,
+    promotion: entry.promotion || 'none',
+    matched_name: entry.matchedName || '',
+    source_url: entry.sourceUrl || '',
+    actor: entry.actor || '',
+    checked_at: entry.checkedAt || new Date().toISOString()
+  };
+  if (!supabaseConfig()) return appendLocalHistory(row);
   return dbFetch('price_history', {
     method: 'POST',
     headers: { Prefer: 'return=representation' },
-    body: JSON.stringify({
-      household_id: entry.householdId,
-      product_id: entry.productId,
-      product_name: entry.productName || '',
-      store_id: entry.storeId,
-      store_name: entry.storeName || '',
-      price: Number(entry.price) || 0,
-      promotion: entry.promotion || 'none',
-      matched_name: entry.matchedName || '',
-      source_url: entry.sourceUrl || '',
-      actor: entry.actor || '',
-      checked_at: entry.checkedAt || new Date().toISOString()
-    })
+    body: JSON.stringify(row)
   });
 }
 
@@ -40,12 +44,7 @@ export default async function handler(req, res) {
   if (householdId.length < 4) return res.status(400).json({ error: 'householdId required' });
   try {
     if (req.method === 'GET') {
-      const rows = await listHistory({
-        householdId,
-        productId: String(req.query.productId || ''),
-        storeId: String(req.query.storeId || ''),
-        limit: req.query.limit
-      });
+      const rows = await listHistory({ householdId, productId: String(req.query.productId || ''), storeId: String(req.query.storeId || ''), limit: req.query.limit });
       return res.status(200).json({ history: rows });
     }
     if (req.method === 'POST') {
