@@ -1,5 +1,4 @@
-import { dedupeProducts, extractSpec, normalizeProduct, queryMatches, stripTags } from './common.js';
-import { searchCompareService } from './mcp.js';
+import { dedupeProducts, extractSpec, normalizeProduct, queryMatches, searchMcpCompare, stripTags } from './common.js';
 
 export function parseEmart24Html(rawHtml, q, storeId = '', sourceUrl = '') {
   const html = String(rawHtml).replace(/\r?\n/g, ' ');
@@ -17,5 +16,5 @@ export function parseEmart24Html(rawHtml, q, storeId = '', sourceUrl = '') {
 }
 
 export async function searchEmart24({ q, storeId = '' }) {
-  return searchCompareService({ q, retailer: 'emart24', service: 'emart24', storeId });
+  return searchMcpCompare({ q, retailer: 'emart24', service: 'emart24', storeId });
 }
