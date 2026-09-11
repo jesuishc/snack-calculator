@@ -115,12 +115,20 @@ export async function searchGs25Direct(q) {
   return searchGs25Official(q);
 }
 
-export async function resolveGs25Price(q, itemCode) {
-  const path = `/api/gs25/inventory?keyword=${encodeURIComponent(q)}&itemCode=${encodeURIComponent(itemCode)}&storeLimit=10`;
+export async function resolveGs25Price(q, itemCode, latitude, longitude) {
+  const lat = Number(latitude);
+  const lng = Number(longitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    throw new Error('GS25 가격 조회에는 위치 정보가 필요합니다.');
+  }
+  const path = `/api/gs25/inventory?keyword=${encodeURIComponent(q)}&itemCode=${encodeURIComponent(itemCode)}&lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}&storeLimit=10`;
   const data = envelope(await get(path, 25000));
+  const stores = data?.inventory?.stores || [];
+  const storeWithPrice = stores.find(store => Number(store?.searchItemSellPrice) > 0);
+  const price = data?.product?.sellPrice ?? storeWithPrice?.searchItemSellPrice ?? null;
   return product('gs25', {
-    name: data?.product?.name || q,
-    price: data?.product?.sellPrice,
+    name: data?.product?.name || storeWithPrice?.searchItemName || q,
+    price,
     productId: data?.itemCode || itemCode,
     image: data?.product?.imageUrl,
     stock: data?.inventory?.totalStockQuantity ?? null,
