@@ -7,7 +7,7 @@ const EXTRA_RETAILERS = {
 
 const esc = (value = '') => String(value).replace(/[&<>'"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;' }[c]));
 const num = value => Number(value) || 0;
-const PENDING_KEY = 'snackPendingRetailerClipboardV1';
+const PENDING_KEY = 'snackPendingRetailerClipboardV2';
 let clipboardBusy = false;
 
 function ensureRetailerColumns() {
@@ -86,17 +86,51 @@ function validRetailerUrl(storeId, value) {
   } catch { return false; }
 }
 
-function openClipboardStatus(title, message, allowButton = false) {
+function openStatus(title, message) {
   const modal = document.getElementById('modal');
   const body = document.getElementById('modalBody');
   if (!modal || !body) return;
-  body.innerHTML = `<h2>${esc(title)}</h2><div class="status" id="clipboardStatus">${message}</div>${allowButton ? '<button class="btn primary" style="width:100%;margin-top:10px" id="readClipboardNow">클립보드에서 가져오기</button>' : ''}<div class="foot"><button class="btn soft" onclick="closeModal()">닫기</button></div>`;
+  body.innerHTML = `<h2>${esc(title)}</h2><div class="status" id="clipboardStatus">${message}</div><div class="foot"><button class="btn soft" onclick="closeModal()">닫기</button></div>`;
   modal.classList.add('open');
-  if (allowButton) document.getElementById('readClipboardNow').onclick = () => tryClipboardImport(true);
+}
+
+function openPasteFallback(pending, message = '브라우저가 클립보드 자동 읽기를 막았습니다.') {
+  const modal = document.getElementById('modal');
+  const body = document.getElementById('modalBody');
+  if (!modal || !body || !pending) return;
+  const label = EXTRA_RETAILERS[pending.storeId]?.label || '판매처';
+  body.innerHTML = `
+    <h2>${esc(label)} 링크 붙여넣기</h2>
+    <div class="status">${esc(message)}</div>
+    <div class="tip">${esc(label)}에서 링크를 복사한 뒤 아래 칸을 길게 눌러 <strong>붙여넣기</strong>만 하세요. 상품명과 가격은 자동으로 가져옵니다.</div>
+    <input id="retailerPasteInput" inputmode="url" autocomplete="off" autocapitalize="off" placeholder="여기에 링크 붙여넣기" style="width:100%;box-sizing:border-box;margin:10px 0;padding:14px;font-size:16px">
+    <button class="btn primary" style="width:100%" id="confirmRetailerPaste">붙여넣은 링크 확인</button>
+    <div class="foot"><button class="btn soft" onclick="closeModal()">닫기</button></div>`;
+  modal.classList.add('open');
+  const input = document.getElementById('retailerPasteInput');
+  const submit = async () => {
+    const sourceUrl = extractHttpUrl(input.value);
+    if (!sourceUrl || !validRetailerUrl(pending.storeId, sourceUrl)) {
+      input.setCustomValidity(`${label} 상품 링크를 붙여넣어 주세요.`);
+      input.reportValidity();
+      return;
+    }
+    input.setCustomValidity('');
+    try { await importRetailerUrl(pending, sourceUrl); }
+    catch (error) { openPasteFallback(pending, error.message || '가격을 가져오지 못했습니다.'); }
+  };
+  input.addEventListener('paste', () => setTimeout(submit, 0));
+  input.addEventListener('input', () => {
+    input.setCustomValidity('');
+    const sourceUrl = extractHttpUrl(input.value);
+    if (sourceUrl && validRetailerUrl(pending.storeId, sourceUrl)) setTimeout(submit, 0);
+  });
+  document.getElementById('confirmRetailerPaste').onclick = submit;
+  setTimeout(() => input.focus(), 100);
 }
 
 async function importRetailerUrl(pending, sourceUrl) {
-  openClipboardStatus(`${EXTRA_RETAILERS[pending.storeId]?.label || pending.storeId} 가격 확인`, '복사한 상품 링크에서 판매가격을 읽고 있습니다…');
+  openStatus(`${EXTRA_RETAILERS[pending.storeId]?.label || pending.storeId} 가격 확인`, '선택한 상품 상세페이지에서 판매가격을 읽고 있습니다…');
   const url = new URL((window.SNACK_CONFIG?.apiBase || window.location.origin).replace(/\/$/, '') + '/api/search');
   url.searchParams.set('q', pending.query || '상품');
   url.searchParams.set('retailer', pending.storeId);
@@ -108,40 +142,56 @@ async function importRetailerUrl(pending, sourceUrl) {
   if (!product || !(num(product.price) > 0)) throw new Error('선택한 상품의 판매가격을 읽지 못했습니다.');
   saveCandidate(pending.snackId, pending.storeId, product);
   localStorage.removeItem(PENDING_KEY);
-  document.getElementById('clipboardStatus').textContent = `${product.name || pending.query} · ${num(product.price).toLocaleString()}원 저장 완료`;
+  const status = document.getElementById('clipboardStatus');
+  if (status) status.textContent = `${product.name || pending.query} · ${num(product.price).toLocaleString()}원 저장 완료`;
   setTimeout(() => window.location.reload(), 700);
 }
 
-async function tryClipboardImport(userTriggered = false) {
+function extractSharedUrl(params) {
+  const direct = params.get('url') || '';
+  if (/^https?:\/\//i.test(direct)) return direct.trim();
+  return extractHttpUrl(`${params.get('text') || ''} ${params.get('title') || ''}`);
+}
+
+async function consumeShareTarget() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('shared') !== '1') return false;
+  const pending = readPending();
+  const sourceUrl = extractSharedUrl(params);
+  history.replaceState({}, '', '/');
+  if (!pending) {
+    openStatus('공유 상품 확인 실패', '어떤 과자에 저장할지 확인하지 못했습니다. 과자가격 앱에서 상품 찾기를 다시 눌러 주세요.');
+    return true;
+  }
+  if (!sourceUrl || !validRetailerUrl(pending.storeId, sourceUrl)) {
+    openPasteFallback(pending, '공유된 상품 주소를 읽지 못했습니다. 링크를 붙여넣어 주세요.');
+    return true;
+  }
+  try { await importRetailerUrl(pending, sourceUrl); }
+  catch (error) { openPasteFallback(pending, error.message || '가격을 가져오지 못했습니다.'); }
+  return true;
+}
+
+async function tryClipboardImport(showFallback = false) {
   const pending = readPending();
   if (!pending || clipboardBusy || document.visibilityState === 'hidden') return false;
   clipboardBusy = true;
   try {
-    if (!navigator.clipboard?.readText) {
-      if (userTriggered) openClipboardStatus('클립보드 읽기 불가', '현재 브라우저가 클립보드 읽기를 지원하지 않습니다.');
-      return false;
-    }
+    if (!navigator.clipboard?.readText) throw new Error('이 브라우저는 자동 클립보드 읽기를 지원하지 않습니다.');
     const text = await navigator.clipboard.readText();
     const sourceUrl = extractHttpUrl(text);
-    if (!sourceUrl || !validRetailerUrl(pending.storeId, sourceUrl)) {
-      if (userTriggered) openClipboardStatus('상품 링크를 찾지 못했습니다', `${EXTRA_RETAILERS[pending.storeId]?.label || '판매처'} 상품 링크를 복사한 뒤 다시 눌러주세요.`, true);
-      return false;
-    }
+    if (!sourceUrl || !validRetailerUrl(pending.storeId, sourceUrl)) throw new Error(`${EXTRA_RETAILERS[pending.storeId]?.label || '판매처'} 상품 링크를 찾지 못했습니다.`);
     await importRetailerUrl(pending, sourceUrl);
     return true;
   } catch (error) {
-    if (userTriggered) {
-      openClipboardStatus('클립보드 권한 필요', `브라우저가 자동 읽기를 막았습니다. 아래 버튼을 다시 누르면 권한 요청 후 가져옵니다.<br><small>${esc(error.message || '')}</small>`, true);
-    } else {
-      openClipboardStatus('상품 링크 복사 완료 후', '쿠팡에서 링크를 복사하고 이 화면으로 돌아오셨습니다. 브라우저 권한 때문에 자동 읽기가 막힌 경우 아래 버튼만 한 번 눌러주세요.', true);
-    }
+    if (showFallback) openPasteFallback(pending, error.message || '클립보드 자동 읽기가 차단되었습니다.');
     return false;
   } finally {
     clipboardBusy = false;
   }
 }
 
-function openCoupangClipboardFlow(snackId) {
+function openCoupangFlow(snackId) {
   const snack = getSnacks().find(item => String(item.id) === String(snackId));
   if (!snack) return;
   const query = `${snack.brand || ''} ${snack.name || ''}`.trim();
@@ -149,17 +199,17 @@ function openCoupangClipboardFlow(snackId) {
   const body = document.getElementById('modalBody');
   body.innerHTML = `
     <h2>쿠팡 상품 선택</h2>
-    <div class="status">Whale에서도 쓸 수 있는 방식입니다. URL이나 가격을 직접 입력하지 않습니다.</div>
-    <div class="tip">① 쿠팡 검색 열기 → ② 원하는 상품 상세페이지 선택 → ③ 우측 상단 <strong>공유</strong> → ④ 공유창의 링크 오른쪽 <strong>복사 아이콘</strong> → ⑤ Snack Calculator로 돌아오기.<br>돌아오면 가격을 자동으로 읽습니다. 자동 읽기가 막히면 버튼 한 번만 누르면 됩니다.</div>
+    <div class="status">Chrome과 Whale 둘 다 지원합니다.</div>
+    <div class="tip"><strong>Chrome/PWA:</strong> 상품 상세 → 공유 → <strong>과자가격</strong> 선택<br><strong>Whale:</strong> 상품 상세 → 공유 → 링크 복사 → Snack Calculator로 돌아오기. 자동 읽기가 막히면 붙여넣기 칸이 바로 뜹니다.</div>
     <button class="btn dark" style="width:100%;margin:10px 0" id="openCoupangSearch">쿠팡에서 “${esc(query)}” 검색</button>
-    <button class="btn primary" style="width:100%;margin:4px 0" id="readClipboardNow">링크를 이미 복사했어요</button>
+    <button class="btn primary" style="width:100%;margin:4px 0" id="pasteCoupangLink">링크를 이미 복사했어요</button>
     <div class="foot"><button class="btn soft" onclick="closeModal()">취소</button></div>`;
   modal.classList.add('open');
   document.getElementById('openCoupangSearch').onclick = () => {
     rememberPending(snackId, 'coupang', query);
     window.open(EXTRA_RETAILERS.coupang.url(query), '_blank', 'noopener');
   };
-  document.getElementById('readClipboardNow').onclick = () => {
+  document.getElementById('pasteCoupangLink').onclick = () => {
     rememberPending(snackId, 'coupang', query);
     tryClipboardImport(true);
   };
@@ -194,16 +244,14 @@ async function enrichGs25Candidate(snack, candidate, status) {
 }
 
 async function findExtraRetailer(snackId, storeId) {
-  if (storeId === 'coupang') return openCoupangClipboardFlow(snackId);
+  if (storeId === 'coupang') return openCoupangFlow(snackId);
   const retailer = EXTRA_RETAILERS[storeId];
   const snack = getSnacks().find(item => String(item.id) === String(snackId));
   if (!retailer || !snack) return;
-
   const modal = document.getElementById('modal');
   const body = document.getElementById('modalBody');
   body.innerHTML = `<h2>${retailer.label} 후보 검색</h2><div class="status" id="extraStatus">상품 데이터를 조회하고 있습니다…</div><div id="extraCandidates"></div><div class="fallback" id="extraFallback"></div><button class="btn soft" style="width:100%;margin-top:8px" onclick="closeModal()">닫기</button>`;
   modal.classList.add('open');
-
   try {
     const url = new URL((window.SNACK_CONFIG?.apiBase || window.location.origin).replace(/\/$/, '') + '/api/search');
     url.searchParams.set('q', `${snack.brand || ''} ${snack.name || ''}`.trim());
@@ -259,9 +307,14 @@ function installBridge() {
   return true;
 }
 
-function installClipboardReturnWatcher() {
+function installReturnWatcher() {
   const retry = () => {
-    if (readPending()) setTimeout(() => tryClipboardImport(false), 250);
+    const pending = readPending();
+    if (!pending) return;
+    setTimeout(async () => {
+      const ok = await tryClipboardImport(false);
+      if (!ok && readPending()) openPasteFallback(readPending());
+    }, 300);
   };
   window.addEventListener('focus', retry);
   document.addEventListener('visibilitychange', () => {
@@ -274,14 +327,15 @@ async function bootRetailerExtension() {
     window.location.reload();
     return;
   }
-  installClipboardReturnWatcher();
+  const consumed = await consumeShareTarget();
+  installReturnWatcher();
   if (!installBridge()) {
     const timer = setInterval(() => {
       if (installBridge()) clearInterval(timer);
     }, 50);
     setTimeout(() => clearInterval(timer), 5000);
   }
-  if (readPending()) setTimeout(() => tryClipboardImport(false), 600);
+  if (!consumed && readPending()) setTimeout(() => tryClipboardImport(false), 600);
 }
 
 bootRetailerExtension();
