@@ -1,9 +1,9 @@
-import { searchCoupang } from './retailers/coupang.js';
-import { searchDaiso } from './retailers/daiso.js';
-import { searchGs25 } from './retailers/gs25.js';
-import { searchEmart24 } from './retailers/emart24.js';
-import { searchCu } from './retailers/cu.js';
-import { searchSeven } from './retailers/seven.js';
+import { searchCoupang } from '../src/server/retailers/coupang.js';
+import { searchDaiso } from '../src/server/retailers/daiso.js';
+import { searchGs25 } from '../src/server/retailers/gs25.js';
+import { searchEmart24 } from '../src/server/retailers/emart24.js';
+import { searchCu } from '../src/server/retailers/cu.js';
+import { searchSeven } from '../src/server/retailers/seven.js';
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
