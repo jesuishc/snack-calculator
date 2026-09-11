@@ -1,4 +1,5 @@
 import { searchCoupang } from './retailers/coupang.js';
+import { searchDaiso } from './retailers/daiso.js';
 import { searchGs25 } from './retailers/gs25.js';
 import { searchEmart24 } from './retailers/emart24.js';
 import { searchCu } from './retailers/cu.js';
@@ -12,6 +13,7 @@ const cors = {
 
 const adapters = {
   coupang: searchCoupang,
+  daiso: searchDaiso,
   gs25: searchGs25,
   emart24: searchEmart24,
   cu: searchCu,
@@ -43,9 +45,9 @@ export default async function handler(req, res) {
       checkedAt: new Date().toISOString(),
       sourceUrl: result.sourceUrl,
       products: result.products,
-      notice: retailer === 'seven'
-        ? '세븐일레븐은 공개 행사상품 데이터 기준 참고값입니다. 점포별 재고와 실제 판매가는 다를 수 있습니다.'
-        : '가격과 행사 정보는 조회 시점 기준 참고값이며 점포, 회원, 쿠폰, 옵션에 따라 실제 결제 조건이 달라질 수 있습니다.'
+      notice: retailer === 'gs25'
+        ? 'GS25 상품검색은 후보를 우선 제공합니다. 가격은 선택한 상품코드 기준 재고 조회에서 보강할 수 있습니다.'
+        : '가격과 재고 정보는 조회 시점 기준 참고값이며 점포, 행사, 옵션에 따라 실제 조건이 달라질 수 있습니다.'
     });
   } catch (error) {
     return res.status(502).json({ error: error.message || 'search failed', retailer, storeId });
