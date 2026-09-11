@@ -78,6 +78,90 @@ export function parseCoupangReader(text, q, sourceUrl = '') {
   return dedupeProducts(products).slice(0, 12);
 }
 
+function parseCoupangDetailHtml(html, sourceUrl, fallbackName = '') {
+  const text = String(html);
+  const title = stripTags(
+    (text.match(/<h1[^>]+class="[^"]*(?:prod-buy-header__title|prod-buy-header__title__name)[^"]*"[^>]*>([\s\S]*?)<\/h1>/i) || [])[1]
+    || (text.match(/<meta[^>]+property="og:title"[^>]+content="([^"]+)"/i) || [])[1]
+    || (text.match(/"name"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"/i) || [])[1]
+    || fallbackName
+  );
+  const price =
+    (text.match(/<meta[^>]+(?:property|itemprop)="(?:product:price:amount|price)"[^>]+content="?([0-9][0-9,]*)/i) || [])[1]
+    || (text.match(/class="[^"]*(?:total-price|final-price|sale-price)[^"]*"[\s\S]{0,300}?([0-9][0-9,]{2,})\s*원/i) || [])[1]
+    || (text.match(/"(?:salePrice|discountPrice|finalPrice|price)"\s*:\s*"?([0-9][0-9,]*)"?/i) || [])[1];
+  if (!price) return null;
+  return normalizeProduct('coupang', {
+    name: title || fallbackName,
+    price,
+    url: sourceUrl,
+    productId: (sourceUrl.match(/\/vp\/products\/(\d+)/i) || [])[1] || '',
+    ...extractSpec(title || fallbackName)
+  });
+}
+
+function parseCoupangDetailReader(text, sourceUrl, fallbackName = '') {
+  const lines = String(text).split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  let title = '';
+  for (const line of lines.slice(0, 80)) {
+    const heading = line.match(/^#{1,3}\s+(.{2,180})$/);
+    if (heading && !/쿠팡|coupang/i.test(heading[1])) { title = stripTags(heading[1]); break; }
+  }
+  for (const line of lines) {
+    const match = line.match(/(?:^|\s)([0-9]{1,3}(?:,[0-9]{3})+)\s*원(?:\s|$|\()/);
+    if (!match) continue;
+    if (/10g당|100g당|개당|월\s*[0-9,]+원/.test(line) && !/^\s*[0-9,]+\s*원/.test(line)) continue;
+    const name = title || fallbackName;
+    return normalizeProduct('coupang', {
+      name,
+      price: match[1],
+      url: sourceUrl,
+      productId: (sourceUrl.match(/\/vp\/products\/(\d+)/i) || [])[1] || '',
+      ...extractSpec(name)
+    });
+  }
+  return null;
+}
+
+function assertCoupangUrl(value) {
+  let url;
+  try { url = new URL(String(value)); } catch { throw new Error('올바른 쿠팡 공유 주소가 아닙니다.'); }
+  const host = url.hostname.toLowerCase();
+  if (!(host === 'coupang.com' || host.endsWith('.coupang.com'))) throw new Error('쿠팡 상품 공유 주소만 사용할 수 있습니다.');
+  return url.toString();
+}
+
+export async function resolveCoupangSharedProduct({ sourceUrl, q = '' }) {
+  const sharedUrl = assertCoupangUrl(sourceUrl);
+  let finalUrl = sharedUrl;
+  try {
+    const response = await fetch(sharedUrl, {
+      redirect: 'follow',
+      headers: {
+        'user-agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/126 Mobile Safari/537.36',
+        'accept-language': 'ko-KR,ko;q=0.9,en;q=0.7',
+        accept: 'text/html,application/xhtml+xml'
+      },
+      signal: AbortSignal.timeout(15000)
+    });
+    finalUrl = response.url || sharedUrl;
+    if (response.ok) {
+      const html = await response.text();
+      const product = parseCoupangDetailHtml(html, finalUrl, q);
+      if (product?.price > 0) return { retailer: 'coupang', sourceUrl: finalUrl, products: [product] };
+    }
+  } catch {}
+
+  try {
+    const readerUrl = `https://r.jina.ai/${finalUrl}`;
+    const text = await fetchText(readerUrl, { timeout: 25000, headers: { accept: 'text/plain' } });
+    const product = parseCoupangDetailReader(text, finalUrl, q);
+    if (product?.price > 0) return { retailer: 'coupang', sourceUrl: finalUrl, products: [product] };
+  } catch {}
+
+  throw new Error('선택한 쿠팡 상품 상세페이지에서 현재 판매가격을 읽지 못했습니다.');
+}
+
 function signedDate(now = new Date()) {
   const iso = now.toISOString().replace(/[-:]/g, '');
   return iso.slice(2, 8) + 'T' + iso.slice(9, 15) + 'Z';
@@ -114,23 +198,21 @@ export async function searchCoupangPartners(q) {
   return { retailer: 'coupang', sourceUrl: url, products: dedupeProducts(products).slice(0, 10) };
 }
 
-export async function searchCoupang({ q }) {
+export async function searchCoupang({ q, sourceUrl = '' }) {
+  if (sourceUrl) return resolveCoupangSharedProduct({ sourceUrl, q });
   const partners = await searchCoupangPartners(q);
   if (partners?.products?.length) return partners;
-  const sourceUrl = `https://www.coupang.com/np/search?q=${encodeURIComponent(q)}`;
+  const searchUrl = `https://www.coupang.com/np/search?q=${encodeURIComponent(q)}`;
   try {
-    const html = await fetchText(sourceUrl, { timeout: 15000, headers: { referer: 'https://www.coupang.com/', 'cache-control': 'no-cache', pragma: 'no-cache' } });
-    const direct = parseCoupangHtml(html, q, sourceUrl);
-    if (direct.length) return { retailer: 'coupang', sourceUrl, products: direct };
+    const html = await fetchText(searchUrl, { timeout: 15000, headers: { referer: 'https://www.coupang.com/', 'cache-control': 'no-cache', pragma: 'no-cache' } });
+    const direct = parseCoupangHtml(html, q, searchUrl);
+    if (direct.length) return { retailer: 'coupang', sourceUrl: searchUrl, products: direct };
   } catch {}
   try {
-    const readerUrl = `https://r.jina.ai/${sourceUrl}`;
+    const readerUrl = `https://r.jina.ai/${searchUrl}`;
     const text = await fetchText(readerUrl, { timeout: 25000, headers: { accept: 'text/plain' } });
-    const products = parseCoupangReader(text, q, sourceUrl);
-    if (products.length) return { retailer: 'coupang', sourceUrl, products };
+    const products = parseCoupangReader(text, q, searchUrl);
+    if (products.length) return { retailer: 'coupang', sourceUrl: searchUrl, products };
   } catch {}
-  if (!process.env.COUPANG_PARTNERS_ACCESS_KEY || !process.env.COUPANG_PARTNERS_SECRET_KEY) {
-    throw new Error('쿠팡 자동검색 설정이 필요합니다. COUPANG_PARTNERS_ACCESS_KEY와 COUPANG_PARTNERS_SECRET_KEY를 Vercel Preview 환경변수에 등록해 주세요.');
-  }
-  throw new Error('쿠팡에서 현재 검색 가능한 상품 가격을 받지 못했습니다.');
+  throw new Error('쿠팡 검색 결과를 자동으로 읽지 못했습니다. 상품 상세페이지에서 공유 → 과자가격을 사용해 주세요.');
 }
