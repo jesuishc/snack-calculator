@@ -1,8 +1,7 @@
 import { dedupeProducts, extractSpec, fetchText, normalizeProduct, queryMatches, stripTags } from './common.js';
 
-export async function searchEmart24({ q, storeId = '' }) {
-  const sourceUrl = `https://m.emart24.co.kr/goods/event?search=${encodeURIComponent(q)}`;
-  const html = (await fetchText(sourceUrl)).replace(/\r?\n/g, ' ');
+export function parseEmart24Html(rawHtml, q, storeId = '', sourceUrl = '') {
+  const html = String(rawHtml).replace(/\r?\n/g, ' ');
   const products = [];
   const cards = html.match(/<(?:li|div)[^>]+class="[^"]*(?:item|goods|product)[^"]*"[\s\S]{0,2500}?<\/(?:li|div)>/gi) || [];
 
@@ -17,7 +16,7 @@ export async function searchEmart24({ q, storeId = '' }) {
 
   if (!products.length) {
     const text = stripTags(html);
-    const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const escaped = String(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const pattern = new RegExp(`([^]{0,70}${escaped}[^]{0,100})\\s([0-9,]{3,})\\s*원\\s*(1\\+1|2\\+1|3\\+1|덤증정)?`, 'gi');
     let match;
     while ((match = pattern.exec(text)) && products.length < 12) {
@@ -25,6 +24,11 @@ export async function searchEmart24({ q, storeId = '' }) {
       products.push(normalizeProduct('emart24', { name, price: match[2], promotion: match[3] || '', storeId, url: sourceUrl, ...extractSpec(name) }));
     }
   }
+  return dedupeProducts(products).slice(0, 12);
+}
 
-  return { retailer: 'emart24', sourceUrl, products: dedupeProducts(products).slice(0, 12) };
+export async function searchEmart24({ q, storeId = '' }) {
+  const sourceUrl = `https://m.emart24.co.kr/goods/event?search=${encodeURIComponent(q)}`;
+  const html = await fetchText(sourceUrl);
+  return { retailer: 'emart24', sourceUrl, products: parseEmart24Html(html, q, storeId, sourceUrl) };
 }
