@@ -1,4 +1,5 @@
-import { dbFetch } from './db.js';
+import { dbFetch, supabaseConfig } from './db.js';
+import { getLocalHousehold, putLocalHousehold } from './local-store.js';
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -7,12 +8,14 @@ const cors = {
 };
 
 export async function getHousehold(householdId) {
+  if (!supabaseConfig()) return getLocalHousehold(householdId);
   const id = encodeURIComponent(householdId);
   const rows = await dbFetch(`household_snapshots?household_id=eq.${id}&select=payload,updated_at&limit=1`);
   return rows?.[0] || null;
 }
 
 export async function putHousehold(householdId, payload) {
+  if (!supabaseConfig()) return putLocalHousehold(householdId, payload);
   await dbFetch('household_snapshots?on_conflict=household_id', {
     method: 'POST',
     headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
