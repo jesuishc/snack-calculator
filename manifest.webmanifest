@@ -7,5 +7,15 @@
   "display": "standalone",
   "background_color": "#f5f7fb",
   "theme_color": "#f5f7fb",
-  "lang": "ko-KR"
+  "lang": "ko-KR",
+  "share_target": {
+    "action": "/?shared=1",
+    "method": "GET",
+    "enctype": "application/x-www-form-urlencoded",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  }
 }
