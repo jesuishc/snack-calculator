@@ -182,6 +182,36 @@ async function chooseCandidate(candidate) {
   const snack=snacks.find(item=>item.id===active.id); const old=migrateOffer(snack.offers[active.store]); const offer={...old,price:candidate.price,matchedName:candidate.name,matchScore:candidate.score,sourceUrl:candidate.url||FIXED[active.store].url(candidate.name),productId:candidate.productId||'',candidateWeight:candidate.weight||0,candidateCount:candidate.count||0,promo:candidate.promotion||old.promo,checkedAt:nowIso()};
   snack.offers[active.store]=offer; await recordPrice(snack,active.store,offer); save(); render(); editOffer(snack.id,active.store);
 }
+async function refreshRememberedPrices() {
+  const targets=[];
+  for(const snack of snacks){
+    for(const store of stores.filter(item=>item.fixed)){
+      const offer=migrateOffer(snack.offers[store.id]);
+      if(offer.productId||offer.matchedName) targets.push({snack,store,offer});
+    }
+  }
+  if(!targets.length) return alert('먼저 각 판매처에서 상품을 한 번 선택해 주세요.');
+  let updated=0,skipped=0,failed=0;
+  for(let i=0;i<targets.length;i+=1){
+    const {snack,store,offer}=targets[i];
+    els.cloudStatus.textContent=`가격 갱신 ${i+1}/${targets.length}…`;
+    try{
+      const remote=await searchBackend(snack,store.id);
+      const candidates=rankCandidates(snack,(remote?.products||[]).map(item=>({store:store.id,...item,...extractCandidateMeta(item.name,item.url)})),offer.productId||'');
+      let candidate=null;
+      if(offer.productId) candidate=candidates.find(item=>item.productId&&String(item.productId)===String(offer.productId));
+      if(!candidate&&offer.matchedName){
+        const expected=offer.matchedName.toLowerCase().replace(/\s+/g,'');
+        candidate=candidates.find(item=>item.score>=85&&item.name.toLowerCase().replace(/\s+/g,'')===expected);
+      }
+      if(!candidate){skipped+=1;continue;}
+      const next={...offer,price:candidate.price,matchedName:candidate.name,matchScore:candidate.score,sourceUrl:candidate.url||offer.sourceUrl,productId:candidate.productId||offer.productId,candidateWeight:candidate.weight||offer.candidateWeight,candidateCount:candidate.count||offer.candidateCount,promo:candidate.promotion||offer.promo,checkedAt:nowIso()};
+      snack.offers[store.id]=next; await recordPrice(snack,store.id,next); updated+=1;
+    }catch{failed+=1;}
+  }
+  save(); render(); els.cloudStatus.textContent=`갱신 ${updated} · 확인필요 ${skipped} · 실패 ${failed}`;
+  alert(`가격 갱신 완료\n업데이트 ${updated}개\n상품 재선택 필요 ${skipped}개\n조회 실패 ${failed}개`);
+}
 function showHistory(id, storeId) {
   const snack=snacks.find(item=>item.id===id); const store=stores.find(item=>item.id===storeId); const rows=historyFor(history,id,storeId);
   els.modalBody.innerHTML=`<h2>${esc(snack.name)} · ${esc(store?.name||storeId)}</h2><div class="status">최근 ${rows.length}건</div>${rows.length?rows.slice(0,30).map(row=>`<div class="candidate"><span><strong>${Number(row.price).toLocaleString()}원</strong><small>${new Date(row.checkedAt).toLocaleString('ko-KR')} · ${esc(row.actor||'')} ${row.promotion&&row.promotion!=='none'?'· '+esc(row.promotion):''}</small></span><span class="won">${row.matchedName?esc(row.matchedName):''}</span></div>`).join(''):'<div class="tip">기록이 없습니다.</div>'}<button class="btn soft" style="width:100%;margin-top:8px" onclick="closeModal()">닫기</button>`; els.modal.classList.add('open');
@@ -221,6 +251,6 @@ async function syncCloud(mode) {
 }
 function closeModal(){els.modal.classList.remove('open');}
 
-Object.assign(window,{setBasis,addSnack,addStore,removeStore,removeSnack,rate,sortRows,resetAll,editSpec,saveSpec,editOffer,saveOffer,findSimilar,showHistory,openProfileSettings,saveProfileSettings,openStoreSettings,saveStoreSettings,syncCloud,closeModal});
+Object.assign(window,{setBasis,addSnack,addStore,removeStore,removeSnack,rate,sortRows,resetAll,editSpec,saveSpec,editOffer,saveOffer,findSimilar,refreshRememberedPrices,showHistory,openProfileSettings,saveProfileSettings,openStoreSettings,saveStoreSettings,syncCloud,closeModal});
 els.newName.addEventListener('keydown',event=>{if(event.key==='Enter')addSnack();}); els.newStore.addEventListener('keydown',event=>{if(event.key==='Enter')addStore();}); els.modal.addEventListener('click',event=>{if(event.target===els.modal)closeModal();});
 save(); render();
