@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { extractSpec, queryMatches } from '../src/server/retailers/common.js';
-import { parseCoupangHtml, parseCoupangReader } from '../src/server/retailers/coupang.js';
+import { parseCoupangHtml, parseCoupangReader, parseCoupangDetailHtml, parseCoupangDetailReader } from '../src/server/retailers/coupang.js';
 import { parseGs25Html } from '../src/server/retailers/gs25.js';
 import { parseEmart24Html } from '../src/server/retailers/emart24.js';
 
@@ -18,20 +18,13 @@ test('query matching tolerates omitted brand tokens', () => {
 test('Coupang fixture is normalized', () => {
   const html = `<li class="search-product"><a href="/vp/products/12345"><img data-img-src="//img.test/a.jpg"><div class="name">롯데 몽쉘 딸기 32g x 12개</div><strong class="price-value">4,980</strong></a></li>`;
   const [item] = parseCoupangHtml(html, '몽쉘 딸기', 'https://www.coupang.com/search');
-  assert.equal(item.retailer, 'coupang');
-  assert.equal(item.price, 4980);
-  assert.equal(item.productId, '12345');
-  assert.equal(item.weight, 384);
-  assert.equal(item.count, 12);
+  assert.equal(item.retailer, 'coupang'); assert.equal(item.price, 4980); assert.equal(item.productId, '12345'); assert.equal(item.weight, 384); assert.equal(item.count, 12);
 });
 
 test('Coupang reader handles current plain-text search rows', () => {
   const text = `# '버터링86g'에 대한 검색결과\n* 버터링 소프트 과자쿠키, 86g, 12개 17,950원(10g당 174원) 모레 도착 예정\n* 해태제과 버터링 소프트, 86g, 5개 9,780원(10g당 227원)`;
   const items = parseCoupangReader(text, '버터링', 'https://www.coupang.com/np/search?q=버터링');
-  assert.equal(items.length, 2);
-  assert.equal(items[0].price, 17950);
-  assert.equal(items[0].weight, 86);
-  assert.equal(items[0].count, 12);
+  assert.equal(items.length, 2); assert.equal(items[0].price, 17950); assert.equal(items[0].weight, 86); assert.equal(items[0].count, 12);
 });
 
 test('Coupang reader prefers discounted sale price', () => {
@@ -40,19 +33,28 @@ test('Coupang reader prefers discounted sale price', () => {
   assert.equal(item.price, 7500);
 });
 
+test('Coupang detail parser uses selected vendor item sale price', () => {
+  const url = 'https://www.coupang.com/vp/products/9883251385?itemId=28956529632&vendorItemId=96123456789';
+  const html = `<html><head><meta property="og:title" content="해태제과 버터링 골드, 194g, 4개"></head><body><script>window.__DATA__={"vendorItemId":96123456789,"salePrice":10200,"originalPrice":12000};</script></body></html>`;
+  const item = parseCoupangDetailHtml(html, url, '버터링');
+  assert.equal(item.price, 10200); assert.equal(item.productId, '9883251385'); assert.equal(item.vendorItemId, '96123456789');
+});
+
+test('Coupang detail reader ignores unit price', () => {
+  const url = 'https://www.coupang.com/vp/products/123?itemId=1&vendorItemId=2';
+  const text = `# 해태제과 버터링 골드, 194g, 4개\n10g당 131원\n10,200원 (배송비 포함)`;
+  const item = parseCoupangDetailReader(text, url, '버터링');
+  assert.equal(item.price, 10200);
+});
+
 test('GS25 fixture carries promotion and store id', () => {
   const html = `<li class="product"><p class="tit">몽쉘 딸기 384g 12입</p><span class="cost">5,000원</span><span>1+1</span><input goodsCd="GS123"></li>`;
   const [item] = parseGs25Html(html, '몽쉘 딸기', 'store-1', 'https://gs25.test');
-  assert.equal(item.price, 5000);
-  assert.equal(item.promotion, '1+1');
-  assert.equal(item.storeId, 'store-1');
-  assert.equal(item.count, 12);
+  assert.equal(item.price, 5000); assert.equal(item.promotion, '1+1'); assert.equal(item.storeId, 'store-1'); assert.equal(item.count, 12);
 });
 
 test('Emart24 fixture carries promotion', () => {
   const html = `<div class="goods"><strong class="name">몽쉘 딸기 384g 12입</strong><span class="price">4,800원</span><span>2+1</span><input goodsNo="EM123"></div>`;
   const [item] = parseEmart24Html(html, '몽쉘 딸기', '', 'https://emart24.test');
-  assert.equal(item.price, 4800);
-  assert.equal(item.promotion, '2+1');
-  assert.equal(item.count, 12);
+  assert.equal(item.price, 4800); assert.equal(item.promotion, '2+1'); assert.equal(item.count, 12);
 });
