@@ -10,7 +10,11 @@ const cors = {
 export async function getHousehold(householdId) {
   if (!supabaseConfig()) return getLocalHousehold(householdId);
   const id = encodeURIComponent(householdId);
-  const rows = await dbFetch(`household_snapshots?household_id=eq.${id}&select=payload,updated_at&limit=1`);
+  const rows = await dbFetch(
+    `household_snapshots?household_id=eq.${id}&select=payload,updated_at&limit=1`,
+    {},
+    { householdId }
+  );
   return rows?.[0] || null;
 }
 
@@ -20,7 +24,7 @@ export async function putHousehold(householdId, payload) {
     method: 'POST',
     headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
     body: JSON.stringify({ household_id: householdId, payload, updated_at: new Date().toISOString() })
-  });
+  }, { householdId });
 }
 
 export default async function handler(req, res) {
