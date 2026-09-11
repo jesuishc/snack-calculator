@@ -12,7 +12,11 @@ export async function listHistory({ householdId, productId = '', storeId = '', l
   const filters = [`household_id=eq.${encodeURIComponent(householdId)}`];
   if (productId) filters.push(`product_id=eq.${encodeURIComponent(productId)}`);
   if (storeId) filters.push(`store_id=eq.${encodeURIComponent(storeId)}`);
-  return dbFetch(`price_history?${filters.join('&')}&select=*&order=checked_at.desc&limit=${Math.min(500, Math.max(1, Number(limit) || 200))}`);
+  return dbFetch(
+    `price_history?${filters.join('&')}&select=*&order=checked_at.desc&limit=${Math.min(500, Math.max(1, Number(limit) || 200))}`,
+    {},
+    { householdId }
+  );
 }
 
 export async function appendHistory(entry) {
@@ -34,7 +38,7 @@ export async function appendHistory(entry) {
     method: 'POST',
     headers: { Prefer: 'return=representation' },
     body: JSON.stringify(row)
-  });
+  }, { householdId: entry.householdId });
 }
 
 export default async function handler(req, res) {
