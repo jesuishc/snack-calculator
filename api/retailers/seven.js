@@ -1,5 +1,4 @@
-import { dedupeProducts, extractSpec, normalizeProduct, queryMatches, stripTags } from './common.js';
-import { searchCompareService } from './mcp.js';
+import { dedupeProducts, extractSpec, normalizeProduct, queryMatches, searchMcpCompare, stripTags } from './common.js';
 
 export function parseSevenHtml(rawHtml, q, storeId = '', sourceUrl = '') {
   const text = stripTags(String(rawHtml).replace(/\r?\n/g, ' '));
@@ -15,5 +14,5 @@ export function parseSevenHtml(rawHtml, q, storeId = '', sourceUrl = '') {
 }
 
 export async function searchSeven({ q, storeId = '' }) {
-  return searchCompareService({ q, retailer: 'seven', service: 'seveneleven', storeId });
+  return searchMcpCompare({ q, retailer: 'seven', service: 'seveneleven', storeId });
 }
