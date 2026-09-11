@@ -13,22 +13,23 @@ export function textSimilarity(a, b) {
 
 export function parseSpec(name = '') {
   const text = String(name).toLowerCase();
-  const multiply = text.match(/(\d+(?:\.\d+)?)\s*(g|kg|그램)\s*[x×*]\s*(\d+)\s*(?:개|입|ea|p|팩|pack)?/i)
-    || text.match(/(\d+)\s*(?:개|입|ea|p|팩|pack)\s*[x×*]\s*(\d+(?:\.\d+)?)\s*(g|kg|그램)/i);
+  const weightFirst = text.match(/(\d+(?:\.\d+)?)\s*(g|kg|그램)\s*[x×*]\s*(\d+)\s*(?:개입|개|입|ea|p|팩|pack)?/i);
+  const countFirst = text.match(/(\d+)\s*(?:개입|개|입|ea|p|팩|pack)\s*[x×*]\s*(\d+(?:\.\d+)?)\s*(g|kg|그램)/i);
   let weight = 0; let count = 0;
-  if (multiply) {
-    if (/^(g|kg|그램)$/i.test(multiply[2] || '')) {
-      const each = num(multiply[1]) * (/kg/i.test(multiply[2]) ? 1000 : 1); count = num(multiply[3]); weight = each * count;
-    } else {
-      count = num(multiply[1]); const each = num(multiply[2]) * (/kg/i.test(multiply[3]) ? 1000 : 1); weight = each * count;
-    }
+  if (weightFirst) {
+    const each = num(weightFirst[1]) * (/kg/i.test(weightFirst[2]) ? 1000 : 1);
+    count = num(weightFirst[3]); weight = each * count;
+  } else if (countFirst) {
+    count = num(countFirst[1]);
+    const each = num(countFirst[2]) * (/kg/i.test(countFirst[3]) ? 1000 : 1);
+    weight = each * count;
   }
   if (!weight) {
-    const total = text.match(/(?:총\s*)?(\d+(?:\.\d+)?)\s*(kg|g|그램)\b/i);
+    const total = text.match(/(?:총\s*)?(\d+(?:\.\d+)?)\s*(kg|g|그램)(?:\s|$|[,/])/i) || text.match(/(?:총\s*)?(\d+(?:\.\d+)?)\s*(kg|g|그램)/i);
     if (total) weight = num(total[1]) * (/kg/i.test(total[2]) ? 1000 : 1);
   }
   if (!count) {
-    const c = text.match(/(\d+)\s*(?:개입|개|입|ea|팩|pack|p)\b/i);
+    const c = text.match(/(\d+)\s*(?:개입|개|입|ea|팩|pack|p)(?:\s|$|[,/])/i) || text.match(/(\d+)\s*(?:개입|개|입|ea|팩|pack|p)/i);
     if (c) count = num(c[1]);
   }
   return { weight, count };
@@ -47,12 +48,9 @@ function closeness(expected, actual) {
 }
 
 export function matchCandidate(product, candidate, rememberedProductId = '') {
-  if (rememberedProductId && candidate?.productId && String(candidate.productId) === String(rememberedProductId)) {
-    return { score: 100, notes: ['이전에 선택한 상품'] };
-  }
-  if (product?.barcode && candidate?.barcode && product.barcode === candidate.barcode) {
-    return { score: 100, notes: ['바코드 일치'] };
-  }
+  const remembered = Boolean(rememberedProductId && candidate?.productId && String(candidate.productId) === String(rememberedProductId));
+  if (remembered) return { score: 100, notes: ['이전에 선택한 상품'], remembered: true };
+  if (product?.barcode && candidate?.barcode && product.barcode === candidate.barcode) return { score: 100, notes: ['바코드 일치'], remembered: false };
 
   const notes = [];
   let points = textSimilarity(`${product?.brand || ''} ${product?.name || ''}`, candidate?.name || '') * 50;
@@ -68,10 +66,10 @@ export function matchCandidate(product, candidate, rememberedProductId = '') {
     if (num(candidate?.count)) { const close = closeness(product.count, candidate.count); points += 15 * close; if (close < .9) notes.push(`수량 ${candidate.count}개`); }
     else notes.push('수량 미확인');
   }
-  return { score: Math.min(100, Math.round(points)), notes };
+  return { score: Math.min(100, Math.round(points)), notes, remembered: false };
 }
 
 export function rankCandidates(product, candidates = [], rememberedProductId = '') {
   return candidates.map(candidate => ({ ...candidate, ...matchCandidate(product, candidate, rememberedProductId) }))
-    .sort((a, b) => b.score - a.score || Number(a.price || Infinity) - Number(b.price || Infinity));
+    .sort((a, b) => Number(b.remembered) - Number(a.remembered) || b.score - a.score || Number(a.price || Infinity) - Number(b.price || Infinity));
 }
