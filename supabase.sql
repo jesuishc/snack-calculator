@@ -33,5 +33,35 @@ alter table public.household_snapshots enable row level security;
 alter table public.price_history enable row level security;
 alter table public.user_snapshots enable row level security;
 
--- The serverless/local Node backend uses SUPABASE_SERVICE_ROLE_KEY.
--- Never expose the service-role key in config.js or browser code.
+grant select, insert, update on public.household_snapshots to anon;
+grant select, insert on public.price_history to anon;
+grant usage, select on all sequences in schema public to anon;
+
+drop policy if exists household_snapshots_select_by_household on public.household_snapshots;
+create policy household_snapshots_select_by_household
+on public.household_snapshots for select to anon
+using (household_id = coalesce((current_setting('request.headers', true)::jsonb ->> 'x-household-id'), ''));
+
+drop policy if exists household_snapshots_insert_by_household on public.household_snapshots;
+create policy household_snapshots_insert_by_household
+on public.household_snapshots for insert to anon
+with check (household_id = coalesce((current_setting('request.headers', true)::jsonb ->> 'x-household-id'), ''));
+
+drop policy if exists household_snapshots_update_by_household on public.household_snapshots;
+create policy household_snapshots_update_by_household
+on public.household_snapshots for update to anon
+using (household_id = coalesce((current_setting('request.headers', true)::jsonb ->> 'x-household-id'), ''))
+with check (household_id = coalesce((current_setting('request.headers', true)::jsonb ->> 'x-household-id'), ''));
+
+drop policy if exists price_history_select_by_household on public.price_history;
+create policy price_history_select_by_household
+on public.price_history for select to anon
+using (household_id = coalesce((current_setting('request.headers', true)::jsonb ->> 'x-household-id'), ''));
+
+drop policy if exists price_history_insert_by_household on public.price_history;
+create policy price_history_insert_by_household
+on public.price_history for insert to anon
+with check (household_id = coalesce((current_setting('request.headers', true)::jsonb ->> 'x-household-id'), ''));
+
+-- The browser never receives a service-role key. Vercel can use the public
+-- SUPABASE_PUBLISHABLE_KEY together with the household-scoped RLS policies above.
