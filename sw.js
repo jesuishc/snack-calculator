@@ -1,5 +1,5 @@
-const CACHE='snack-calculator-v7';
-const SHELL=['/','/index.html','/config.js?v=7','/register-sw.js?v=7','/src/styles.css?v=7','/src/app.js?v=7','/src/retailer-extension.js?v=7','/src/domain/price-calculator.js','/src/domain/matcher.js','/src/domain/history.js','/src/domain/state-merge.js','/manifest.webmanifest?v=7'];
+const CACHE='snack-calculator-v8';
+const SHELL=['/','/index.html','/config.js?v=8','/register-sw.js?v=8','/src/styles.css?v=8','/src/app.js?v=8','/src/retailer-extension.js?v=8','/src/domain/price-calculator.js','/src/domain/matcher.js','/src/domain/history.js','/src/domain/state-merge.js','/manifest.webmanifest?v=8'];
 
 self.addEventListener('install',event=>{
   event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(SHELL)));
