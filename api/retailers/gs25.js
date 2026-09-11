@@ -1,4 +1,4 @@
-import { dedupeProducts, extractSpec, fetchText, normalizeProduct, queryMatches, searchMcpCompare, stripTags } from './common.js';
+import { dedupeProducts, extractSpec, fetchText, normalizeProduct, queryMatches, searchMcpCompare, searchMcpGs25Inventory, stripTags } from './common.js';
 
 export function parseGs25Html(rawHtml, q, storeId = '', sourceUrl = '') {
   const html = String(rawHtml).replace(/\r?\n/g, ' ');
@@ -26,7 +26,16 @@ export function parseGs25Html(rawHtml, q, storeId = '', sourceUrl = '') {
 }
 
 export async function searchGs25({ q, storeId = '' }) {
-  try { const mcp = await searchMcpCompare({ q, retailer: 'gs25', service: 'gs25', storeId }); if (mcp.products.length) return mcp; } catch {}
+  try {
+    const priced = await searchMcpGs25Inventory({ q, storeId });
+    if (priced.products.length) return priced;
+  } catch {}
+
+  try {
+    const mcp = await searchMcpCompare({ q, retailer: 'gs25', service: 'gs25', storeId });
+    if (mcp.products.length) return mcp;
+  } catch {}
+
   const sourceUrl = `https://gs25.gsretail.com/gscvs/ko/products/event-goods?searchWord=${encodeURIComponent(q)}`;
   const html = await fetchText(sourceUrl);
   return { retailer: 'gs25', sourceUrl, products: parseGs25Html(html, q, storeId, sourceUrl) };
