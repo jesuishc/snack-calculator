@@ -1,4 +1,8 @@
 const EXTRA_RETAILERS = {
+  coupang: {
+    label: '쿠팡',
+    url: q => `https://www.coupang.com/np/search?q=${encodeURIComponent(q)}`
+  },
   gs25: {
     label: 'GS25',
     url: q => `https://gs25.gsretail.com/gscvs/ko/products/event-goods?searchWord=${encodeURIComponent(q)}`
@@ -93,7 +97,74 @@ async function enrichGs25Candidate(snack, candidate, status) {
   return { ...candidate, ...enriched };
 }
 
+function extractCoupangProductId(url = '') {
+  return (String(url).match(/\/vp\/products\/(\d+)/i) || [])[1] || '';
+}
+
+async function pasteCoupangUrl() {
+  const input = document.getElementById('coupangUrl');
+  const status = document.getElementById('coupangStatus');
+  try {
+    const text = await navigator.clipboard.readText();
+    if (!text) throw new Error('클립보드가 비어 있습니다.');
+    input.value = text.trim();
+    status.textContent = '쿠팡 상품 URL을 붙여넣었습니다. 가격을 확인해서 입력해 주세요.';
+  } catch (error) {
+    status.textContent = `클립보드 읽기 실패: ${error.message || '직접 URL을 붙여넣어 주세요.'}`;
+  }
+}
+
+function saveCoupangManual(snackId) {
+  const snack = getSnacks().find(item => String(item.id) === String(snackId));
+  if (!snack) return;
+  const name = document.getElementById('coupangName')?.value.trim() || snack.name;
+  const price = num(document.getElementById('coupangPrice')?.value);
+  const url = document.getElementById('coupangUrl')?.value.trim() || EXTRA_RETAILERS.coupang.url(snack.name || '');
+  const status = document.getElementById('coupangStatus');
+  if (!(price > 0)) {
+    status.textContent = '쿠팡에서 확인한 판매가격을 입력해 주세요.';
+    document.getElementById('coupangPrice')?.focus();
+    return;
+  }
+  saveCandidate(snackId, 'coupang', {
+    name,
+    price,
+    url,
+    productId: extractCoupangProductId(url),
+    promotion: 'none'
+  });
+  window.location.reload();
+}
+
+function openCoupangManual(snackId) {
+  const snack = getSnacks().find(item => String(item.id) === String(snackId));
+  if (!snack) return;
+  const retailer = EXTRA_RETAILERS.coupang;
+  const query = `${snack.brand || ''} ${snack.name || ''}`.trim();
+  const existing = snack.offers?.coupang || {};
+  const modal = document.getElementById('modal');
+  const body = document.getElementById('modalBody');
+  body.innerHTML = `
+    <h2>쿠팡 상품 선택</h2>
+    <div class="status" id="coupangStatus">파트너스 키 없이 쿠팡 공식 검색에서 실제 상품을 확인한 뒤 가격을 저장합니다.</div>
+    <div class="tip">① 아래 버튼으로 쿠팡에서 상품을 고릅니다. ② 상품명·가격을 입력하고, 가능하면 상품 URL도 붙여넣습니다. 저장된 URL의 상품 ID는 자동 추출됩니다.</div>
+    <button class="btn dark" style="width:100%;margin:10px 0" id="openCoupangSearch">쿠팡에서 “${esc(query)}” 검색</button>
+    <div class="formgrid">
+      <label class="span2">선택한 상품명<input id="coupangName" value="${esc(existing.matchedName || snack.name || '')}" placeholder="예: 해태 버터링 86g"></label>
+      <label>판매가격(원)<input id="coupangPrice" type="number" inputmode="numeric" min="1" value="${existing.price || ''}" placeholder="예: 3980"></label>
+      <label>상품 URL<input id="coupangUrl" value="${esc(existing.sourceUrl || '')}" placeholder="https://www.coupang.com/vp/products/..."></label>
+    </div>
+    <button class="btn soft" style="width:100%;margin-top:8px" id="pasteCoupangUrl">클립보드의 쿠팡 URL 붙여넣기</button>
+    <div class="foot"><button class="btn primary" id="saveCoupangManual">쿠팡 가격 저장</button><button class="btn soft" onclick="closeModal()">취소</button></div>`;
+  modal.classList.add('open');
+  document.getElementById('openCoupangSearch').onclick = () => window.open(retailer.url(query), '_blank', 'noopener');
+  document.getElementById('pasteCoupangUrl').onclick = pasteCoupangUrl;
+  document.getElementById('saveCoupangManual').onclick = () => saveCoupangManual(snackId);
+}
+
 async function findExtraRetailer(snackId, storeId) {
+  if (storeId === 'coupang') return openCoupangManual(snackId);
+
   const retailer = EXTRA_RETAILERS[storeId];
   const snack = getSnacks().find(item => String(item.id) === String(snackId));
   if (!retailer || !snack) return;
@@ -168,6 +239,8 @@ function installBridge() {
     : original(id, storeId);
   return true;
 }
+
+Object.assign(window, { pasteCoupangUrl, saveCoupangManual });
 
 if (ensureRetailerColumns()) {
   window.location.reload();
