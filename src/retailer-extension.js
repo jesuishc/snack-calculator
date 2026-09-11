@@ -5,12 +5,28 @@ const EXTRA_RETAILERS = {
   },
   seven: {
     label: '세븐일레븐',
-    url: () => 'https://pyony.com/brands/seven/'
+    url: q => `https://www.7-eleven.co.kr/?search=${encodeURIComponent(q)}`
   }
 };
 
 const esc = (value = '') => String(value).replace(/[&<>'"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;' }[c]));
 const num = value => Number(value) || 0;
+
+function ensureRetailerColumns() {
+  const key = 'snackStoresV4';
+  let stores;
+  try { stores = JSON.parse(localStorage.getItem(key) || '[]'); } catch { stores = []; }
+  if (!Array.isArray(stores) || !stores.length) return false;
+  let changed = false;
+  for (const [id, retailer] of Object.entries(EXTRA_RETAILERS)) {
+    if (!stores.some(store => store.id === id)) {
+      stores.push({ id, name: retailer.label, fixed: true });
+      changed = true;
+    }
+  }
+  if (changed) localStorage.setItem(key, JSON.stringify(stores));
+  return changed;
+}
 
 function getSnacks() {
   try { return JSON.parse(localStorage.getItem('snackSheetV4') || '[]'); }
@@ -52,7 +68,7 @@ async function findExtraRetailer(snackId, storeId) {
 
   const modal = document.getElementById('modal');
   const body = document.getElementById('modalBody');
-  body.innerHTML = `<h2>${retailer.label} 후보 검색</h2><div class="status" id="extraStatus">상품 데이터를 조회하고 있습니다…</div><div id="extraCandidates"></div><div class="fallback" id="extraFallback"></div><button class="btn soft" style="width:100%;margin-top:8px" onclick="closeModal()">닫기</button>`;
+  body.innerHTML = `<h2>${retailer.label} 후보 검색</h2><div class="status" id="extraStatus">MCP에서 상품 데이터를 조회하고 있습니다…</div><div id="extraCandidates"></div><div class="fallback" id="extraFallback"></div><button class="btn soft" style="width:100%;margin-top:8px" onclick="closeModal()">닫기</button>`;
   modal.classList.add('open');
 
   try {
@@ -71,8 +87,8 @@ async function findExtraRetailer(snackId, storeId) {
     const status = document.getElementById('extraStatus');
     const list = document.getElementById('extraCandidates');
     status.textContent = items.length
-      ? `${items.length}개 후보입니다. 규격을 확인하고 선택하세요.`
-      : `${retailer.label}에서 현재 검색 가능한 상품을 찾지 못했습니다.`;
+      ? `${items.length}개 후보입니다. 상품을 누르면 가격과 상품 정보가 자동 입력됩니다.`
+      : `${retailer.label}에서 현재 가격이 확인되는 상품을 찾지 못했습니다.`;
 
     for (const candidate of items) {
       const button = document.createElement('button');
@@ -88,7 +104,7 @@ async function findExtraRetailer(snackId, storeId) {
     if (!items.length) {
       const link = document.createElement('button');
       link.className = 'btn dark';
-      link.textContent = `${retailer.label} 검색 화면 열기`;
+      link.textContent = `${retailer.label} 공식 화면 열기`;
       link.onclick = () => window.open(retailer.url(snack.name || ''), '_blank', 'noopener');
       document.getElementById('extraFallback').appendChild(link);
     }
@@ -96,7 +112,7 @@ async function findExtraRetailer(snackId, storeId) {
     document.getElementById('extraStatus').textContent = `자동 검색 실패: ${error.message || 'unknown error'}`;
     const link = document.createElement('button');
     link.className = 'btn dark';
-    link.textContent = `${retailer.label} 검색 화면 열기`;
+    link.textContent = `${retailer.label} 공식 화면 열기`;
     link.onclick = () => window.open(retailer.url(snack.name || ''), '_blank', 'noopener');
     document.getElementById('extraFallback').appendChild(link);
   }
@@ -111,7 +127,9 @@ function installBridge() {
   return true;
 }
 
-if (!installBridge()) {
+if (ensureRetailerColumns()) {
+  window.location.reload();
+} else if (!installBridge()) {
   const timer = setInterval(() => {
     if (installBridge()) clearInterval(timer);
   }, 50);
