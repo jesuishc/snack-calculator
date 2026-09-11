@@ -1,0 +1,11 @@
+{
+  "name": "우리 과자 가격 비교표",
+  "short_name": "과자가격",
+  "description": "두 사람이 함께 쓰는 개인용 과자 가격·가성비 비교표",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f5f7fb",
+  "theme_color": "#f5f7fb",
+  "lang": "ko-KR"
+}
