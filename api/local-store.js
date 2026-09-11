@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -19,11 +19,11 @@ async function writeData(data) {
   await mkdir(dirname(file), { recursive: true });
   const temp = `${file}.tmp`;
   await writeFile(temp, JSON.stringify(data, null, 2), 'utf8');
-  await writeFile(file, JSON.stringify(data, null, 2), 'utf8');
+  await rename(temp, file);
 }
 async function mutate(mutator) {
   let result;
-  writeQueue = writeQueue.then(async () => {
+  writeQueue = writeQueue.catch(() => {}).then(async () => {
     const data = await readData();
     result = await mutator(data);
     await writeData(data);
