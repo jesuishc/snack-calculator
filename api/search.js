@@ -20,10 +20,10 @@ const adapters = {
   seven: searchSeven
 };
 
-export async function searchRetailer({ q, retailer, storeId = '', productId = '', lat, lng }) {
+export async function searchRetailer({ q, retailer, storeId = '', productId = '', sourceUrl = '', lat, lng }) {
   const adapter = adapters[retailer];
   if (!adapter) throw new Error(`unsupported retailer: ${retailer}`);
-  return adapter({ q, storeId, productId, lat, lng });
+  return adapter({ q, storeId, productId, sourceUrl, lat, lng });
 }
 
 export default async function handler(req, res) {
@@ -35,13 +35,14 @@ export default async function handler(req, res) {
   const retailer = String(req.query.retailer || '').trim();
   const storeId = String(req.query.storeId || '').trim();
   const productId = String(req.query.productId || '').trim();
+  const sourceUrl = String(req.query.sourceUrl || '').trim();
   const lat = req.query.lat === undefined ? undefined : Number(req.query.lat);
   const lng = req.query.lng === undefined ? undefined : Number(req.query.lng);
   if (q.length < 2) return res.status(400).json({ error: 'query too short' });
   if (!adapters[retailer]) return res.status(400).json({ error: 'unsupported retailer' });
 
   try {
-    const result = await searchRetailer({ q, retailer, storeId, productId, lat, lng });
+    const result = await searchRetailer({ q, retailer, storeId, productId, sourceUrl, lat, lng });
     return res.status(200).json({
       retailer,
       storeId,
@@ -52,7 +53,9 @@ export default async function handler(req, res) {
         ? (productId
           ? '선택한 GS25 상품의 인근 매장 재고 응답에서 가격을 확인했습니다.'
           : 'GS25 상품 후보입니다. 상품을 선택하면 현재 위치 기준 재고 조회로 가격을 확인합니다.')
-        : '가격과 재고 정보는 조회 시점 기준 참고값이며 점포, 행사, 옵션에 따라 실제 조건이 달라질 수 있습니다.'
+        : sourceUrl
+          ? '공유한 상품 상세페이지에서 상품명과 현재 판매가격을 확인했습니다.'
+          : '가격과 재고 정보는 조회 시점 기준 참고값이며 점포, 행사, 옵션에 따라 실제 조건이 달라질 수 있습니다.'
     });
   } catch (error) {
     return res.status(502).json({ error: error.message || 'search failed', retailer, storeId });
