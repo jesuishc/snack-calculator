@@ -15,3 +15,6 @@ jobs:
         with:
           node-version: 24
       - run: npm run verify
+      - name: Live retailer smoke test
+        if: github.event_name == 'push'
+        run: node scripts/live-retailer-smoke.mjs
