@@ -1,5 +1,5 @@
 import { dedupeProducts, extractSpec, normalizeProduct, queryMatches, stripTags } from './common.js';
-import { searchGs25Direct } from '../../src/server/retailer-mcp.js';
+import { resolveGs25Price, searchGs25Direct } from '../../src/server/retailer-mcp.js';
 
 export function parseGs25Html(rawHtml, q, storeId = '', sourceUrl = '') {
   const html = String(rawHtml).replace(/\r?\n/g, ' ');
@@ -16,7 +16,16 @@ export function parseGs25Html(rawHtml, q, storeId = '', sourceUrl = '') {
   return dedupeProducts(products).slice(0, 12);
 }
 
-export async function searchGs25({ q, storeId = '' }) {
+export async function searchGs25({ q, storeId = '', productId = '', lat, lng }) {
+  if (productId) {
+    const enriched = await resolveGs25Price(q, productId, lat, lng);
+    return {
+      retailer: 'gs25',
+      sourceUrl: enriched.url,
+      products: [{ ...enriched, storeId }]
+    };
+  }
+
   const products = await searchGs25Direct(q);
   return {
     retailer: 'gs25',
